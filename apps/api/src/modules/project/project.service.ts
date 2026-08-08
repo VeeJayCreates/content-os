@@ -1,24 +1,24 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+
+import { ProjectRepository } from '@content-os/storage';
+
 import { CreateProjectDto } from './dto/create-project.dto';
 
 @Injectable()
 export class ProjectService {
-  private projects = [
-    {
-      id: '1',
-      name: 'Geo Rajneeti',
-      description: 'India & World Geopolitics',
-      contentType: 'geopolitics',
-      status: 'draft',
-    },
-  ];
+  constructor(
+    private readonly projectRepository: ProjectRepository,
+  ) {}
 
-  findAll() {
-    return this.projects;
+  async findAll() {
+    return this.projectRepository.findAll();
   }
 
-  findOne(id: string) {
-    const project = this.projects.find((p) => p.id === id);
+  async findOne(id: string) {
+    const project = await this.projectRepository.findById(id);
 
     if (!project) {
       throw new NotFoundException('Project not found');
@@ -27,25 +27,23 @@ export class ProjectService {
     return project;
   }
 
-  create(dto: CreateProjectDto) {
-    const project = {
-      id: crypto.randomUUID(),
-      ...dto,
-    };
-
-    this.projects.push(project);
-
-    return project;
+  async create(dto: CreateProjectDto) {
+    return this.projectRepository.create({
+      name: dto.name,
+      description: dto.description,
+      contentType: dto.contentType,
+      status: dto.status,
+    });
   }
 
-  remove(id: string) {
-    const index = this.projects.findIndex((p) => p.id === id);
+  async remove(id: string) {
+    const project = await this.projectRepository.findById(id);
 
-    if (index === -1) {
+    if (!project) {
       throw new NotFoundException('Project not found');
     }
 
-    this.projects.splice(index, 1);
+    await this.projectRepository.delete(id);
 
     return {
       success: true,

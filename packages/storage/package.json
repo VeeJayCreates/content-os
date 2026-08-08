@@ -1,12 +1,42 @@
 {
-  "name": "@content-os/database",
+  "name": "@content-os/storage",
   "version": "1.0.0",
   "private": true,
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+
+  "type": "module",
+
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+
+  "files": [
+    "dist"
+  ],
+
   "scripts": {
+    "build": "tsc -p tsconfig.json",
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
-    "push": "drizzle-kit push"
+    "push": "drizzle-kit push",
+    "studio": "drizzle-kit studio"
+  },
+
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^17.2.2",
+    "drizzle-orm": "^0.45.2"
+  },
+
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^5.9.2"
   }
 }
