@@ -1,0 +1,5 @@
+{
+  "extends": "../typescript-config/base.json",
+  "compilerOptions": { "composite": true },
+  "include": ["src","drizzle.config.ts"]
+}
