@@ -17,3 +17,9 @@ export enum ContentType {
   GEOPOLITICS = "geopolitics",
   ASTROLOGY = "astrology",
 }
+
+export enum ContentStatus {
+  DRAFT = "draft",
+  READY = "ready",
+  ARCHIVED = "archived",
+}

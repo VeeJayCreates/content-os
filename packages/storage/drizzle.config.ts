@@ -4,6 +4,7 @@ import { defineConfig } from 'drizzle-kit';
 export default defineConfig({
   schema: [
     './src/schema/project.ts',
+    './src/schema/content.ts',
     './src/schema/job.ts',
     './src/schema/workflow.ts',
   ],
