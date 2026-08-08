@@ -2,6 +2,7 @@
 
 # Dependencies
 node_modules
+/.pnpm-store/
 .pnp
 .pnp.js
 
@@ -26,6 +27,7 @@ coverage
 out/
 build
 dist
+*.tsbuildinfo
 
 
 # Debug
@@ -36,3 +38,7 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# Local SQLite development databases
+/content-os.db
+/apps/api/content-os.db

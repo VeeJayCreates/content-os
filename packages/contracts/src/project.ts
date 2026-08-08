@@ -1,4 +1,4 @@
-import { ContentType, ProjectStatus } from "./enums";
+import { ContentType, ProjectStatus } from "./enums.js";
 
 export interface Project {
   id: string;
