@@ -1,7 +1,5 @@
-import { FolderKanban } from "lucide-react";
-
-import { PageEmptyState } from "@/components/layout/page-empty-state";
+import { ProjectsScreen } from "@/features/projects/components/projects-screen";
 
 export default function ProjectsPage() {
-  return <PageEmptyState title="Projects" description="Create focused initiatives and keep every content effort aligned." icon={FolderKanban} />;
+  return <ProjectsScreen />;
 }

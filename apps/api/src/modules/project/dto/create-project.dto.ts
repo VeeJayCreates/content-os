@@ -5,18 +5,9 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
+import { ContentType, ProjectStatus } from '@content-os/contracts';
 
-export enum ContentType {
-  GEOPOLITICS = 'geopolitics',
-  ASTROLOGY = 'astrology',
-}
-
-export enum ProjectStatus {
-  DRAFT = 'draft',
-  ACTIVE = 'active',
-  PAUSED = 'paused',
-  ARCHIVED = 'archived',
-}
+export { ContentType, ProjectStatus } from '@content-os/contracts';
 
 export class CreateProjectDto {
   @IsString()

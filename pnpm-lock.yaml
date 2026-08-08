@@ -23,6 +23,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@content-os/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@content-os/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -135,6 +138,9 @@ importers:
 
   apps/dashboard:
     dependencies:
+      '@content-os/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@radix-ui/react-collapsible':
         specifier: ^1.1.20
         version: 1.1.20(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
