@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  "name": "content-os",
+
+  "compatibility_date": "2026-08-08",
+
+  "d1_databases": [
+    {
+      "binding": "content_os",
+      "database_name": "content-os",
+      "database_id": "a6c5750c-73ea-47c0-b42a-0883560574ee"
+    }
+  ]
+}
