@@ -1,4 +1,5 @@
 import type { ResearchSourceProject } from "./research-source.js";
+import type { OpportunityMetricsV2 } from "./opportunity-metrics.js";
 import { OpportunityStatus } from "./enums.js";
 
 export interface Opportunity {
@@ -37,4 +38,5 @@ export interface OpportunitySignal {
 
 export interface OpportunityDetail extends Opportunity {
   signals: OpportunitySignal[];
+  metricsV2: OpportunityMetricsV2 | null;
 }

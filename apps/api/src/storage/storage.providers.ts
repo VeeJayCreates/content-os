@@ -4,6 +4,7 @@ import {
   ResearchSourceRepository,
   SignalRepository,
   OpportunityRepository,
+  OpportunityMetricRepository,
   ResearchPackageRepository,
   TopicSelectionRepository,
 } from '@content-os/storage';
@@ -27,8 +28,15 @@ export const storageProviders = [
     useFactory: () => new OpportunityRepository(),
   },
   {
+    provide: OpportunityMetricRepository,
+    useFactory: () => new OpportunityMetricRepository(),
+  },
+  {
     provide: ResearchPackageRepository,
     useFactory: () => new ResearchPackageRepository(),
   },
-  { provide: TopicSelectionRepository, useFactory: () => new TopicSelectionRepository() },
+  {
+    provide: TopicSelectionRepository,
+    useFactory: () => new TopicSelectionRepository(),
+  },
 ];
