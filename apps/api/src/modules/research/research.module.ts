@@ -11,6 +11,8 @@ import { OpportunityController } from './opportunity.controller';
 import { OpportunityService } from './opportunity.service';
 import { ResearchPackageController } from './research-package.controller';
 import { ResearchPackageService } from './research-package.service';
+import { TopicSelectionController } from './topic-selection.controller';
+import { TopicSelectionService } from './topic-selection.service';
 
 @Module({
   imports: [StorageModule],
@@ -19,6 +21,7 @@ import { ResearchPackageService } from './research-package.service';
     SignalController,
     OpportunityController,
     ResearchPackageController,
+    TopicSelectionController,
   ],
   providers: [
     ResearchService,
@@ -27,6 +30,7 @@ import { ResearchPackageService } from './research-package.service';
     OpportunityDetectionService,
     OpportunityService,
     ResearchPackageService,
+    TopicSelectionService,
   ],
 })
 export class ResearchModule {}

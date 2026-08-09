@@ -1,0 +1,2 @@
+import { IsBoolean, IsInt, IsOptional, Max, Min } from 'class-validator';
+export class UpdateSelectionPolicyDto { @IsOptional() @IsInt() @Min(0) @Max(100) minimumOpportunityScore?: number; @IsOptional() @IsInt() @Min(0) @Max(100) minimumResearchConfidence?: number; @IsOptional() @IsInt() @Min(1) minimumIndependentSources?: number; @IsOptional() @IsInt() @Min(1) maxSelectedPerRun?: number; @IsOptional() @IsBoolean() requireResearchPackage?: boolean; @IsOptional() @IsBoolean() allowSingleSourceBreakingStories?: boolean; }

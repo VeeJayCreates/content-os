@@ -9,6 +9,7 @@ export default defineConfig({
     "./src/schema/signal.ts",
     "./src/schema/opportunity.ts",
     "./src/schema/research-package.ts",
+    "./src/schema/topic-selection.ts",
     "./src/schema/job.ts",
     "./src/schema/workflow.ts",
   ],

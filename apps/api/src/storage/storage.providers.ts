@@ -5,6 +5,7 @@ import {
   SignalRepository,
   OpportunityRepository,
   ResearchPackageRepository,
+  TopicSelectionRepository,
 } from '@content-os/storage';
 
 export const storageProviders = [
@@ -29,4 +30,5 @@ export const storageProviders = [
     provide: ResearchPackageRepository,
     useFactory: () => new ResearchPackageRepository(),
   },
+  { provide: TopicSelectionRepository, useFactory: () => new TopicSelectionRepository() },
 ];

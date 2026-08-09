@@ -1,0 +1,1 @@
+export function selectionScore(opportunityScore: number, confidence: number, sources: number, lastSeenAt: string): number { const ageDays = Math.max(0, (Date.now() - new Date(lastSeenAt).getTime()) / 86_400_000); return Math.max(0, Math.min(100, Math.round(opportunityScore * .45 + confidence * .45 + Math.min(10, sources * 5) - Math.min(10, Math.floor(ageDays))))); }

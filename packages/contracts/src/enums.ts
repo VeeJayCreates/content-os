@@ -59,3 +59,9 @@ export enum ResearchFactStatus {
   CONFLICTING = "conflicting",
   UNVERIFIED = "unverified",
 }
+
+export enum TopicSelectionDecision {
+  SELECTED = "selected",
+  HOLD = "hold",
+  REJECTED = "rejected",
+}

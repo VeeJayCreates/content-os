@@ -8,6 +8,7 @@ import {
   SignalRepository,
   OpportunityRepository,
   ResearchPackageRepository,
+  TopicSelectionRepository,
 } from '@content-os/storage';
 
 @Module({
@@ -19,6 +20,7 @@ import {
     SignalRepository,
     OpportunityRepository,
     ResearchPackageRepository,
+    TopicSelectionRepository,
   ],
 })
 export class StorageModule {}
