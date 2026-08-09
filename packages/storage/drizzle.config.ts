@@ -5,6 +5,7 @@ export default defineConfig({
   schema: [
     './src/schema/project.ts',
     './src/schema/content.ts',
+    './src/schema/research-source.ts',
     './src/schema/job.ts',
     './src/schema/workflow.ts',
   ],

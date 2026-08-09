@@ -23,3 +23,13 @@ export enum ContentStatus {
   READY = "ready",
   ARCHIVED = "archived",
 }
+
+export enum ResearchSourceType {
+  RSS = "rss",
+  WEBSITE = "website",
+  YOUTUBE = "youtube",
+  X = "x",
+  REDDIT = "reddit",
+  OFFICIAL = "official",
+  API = "api",
+}

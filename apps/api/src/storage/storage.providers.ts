@@ -1,4 +1,8 @@
-import { ContentRepository, ProjectRepository } from '@content-os/storage';
+import {
+  ContentRepository,
+  ProjectRepository,
+  ResearchSourceRepository,
+} from '@content-os/storage';
 
 export const storageProviders = [
   {
@@ -8,5 +12,9 @@ export const storageProviders = [
   {
     provide: ContentRepository,
     useFactory: () => new ContentRepository(),
+  },
+  {
+    provide: ResearchSourceRepository,
+    useFactory: () => new ResearchSourceRepository(),
   },
 ];

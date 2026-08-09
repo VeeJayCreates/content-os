@@ -1,5 +1,6 @@
 export * from "./project.js";
 export * from "./content.js";
+export * from "./research-source.js";
 export * from "./workflow.js";
 export * from "./job.js";
 export * from "./scene.js";

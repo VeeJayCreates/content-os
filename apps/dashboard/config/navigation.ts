@@ -7,6 +7,7 @@ import {
   Gauge,
   Image,
   PanelTop,
+  Search,
   Settings,
   Workflow,
 } from "lucide-react";
@@ -36,6 +37,12 @@ export const navigationItems: readonly NavigationItem[] = [
     icon: PanelTop,
     label: "Content",
     description: "Create and manage content",
+  },
+  {
+    href: "/research",
+    icon: Search,
+    label: "Research",
+    description: "Manage research sources",
   },
   {
     href: "/ai-studio",
