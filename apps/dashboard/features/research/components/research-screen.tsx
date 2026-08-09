@@ -108,6 +108,9 @@ export function ResearchScreen() {
           <Button asChild variant="outline">
             <Link href="/research/signals">View signals</Link>
           </Button>
+          <Button asChild variant="outline">
+            <Link href="/research/opportunities">View opportunities</Link>
+          </Button>
           <ResearchSourceFormDialog
             projects={projects}
             defaultProjectId={projectId}

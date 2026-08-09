@@ -35,3 +35,10 @@ export enum ResearchSourceType {
 }
 
 export enum SignalIngestionStatus { CREATED = "created", DUPLICATE = "duplicate", SKIPPED = "skipped" }
+
+export enum OpportunityStatus {
+  DETECTED = "detected",
+  SHORTLISTED = "shortlisted",
+  REJECTED = "rejected",
+  CONVERTED = "converted",
+}

@@ -3,6 +3,9 @@
 import type {
   CreateResearchSourceInput,
   IngestionResult,
+  Opportunity,
+  OpportunityDetectionResult,
+  OpportunityStatus,
   ResearchSource,
   Signal,
   UpdateResearchSourceInput,
@@ -93,4 +96,16 @@ export function getSignals(filters?: {
 
   const query = params.toString();
   return requestUrl<Signal[]>(`${apiEndpoint}/signals${query ? `?${query}` : ""}`);
+}
+
+export function getOpportunities(projectId?: string) {
+  return requestUrl<Opportunity[]>(`${apiEndpoint}/opportunities${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`);
+}
+
+export function detectOpportunities(projectId?: string) {
+  return requestUrl<OpportunityDetectionResult>(`${apiEndpoint}/opportunities/detect`, { method: "POST", body: JSON.stringify(projectId ? { projectId } : {}) });
+}
+
+export function updateOpportunityStatus(id: string, status: OpportunityStatus) {
+  return requestUrl<Opportunity>(`${apiEndpoint}/opportunities/${encodeURIComponent(id)}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
 }

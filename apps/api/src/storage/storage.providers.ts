@@ -3,6 +3,7 @@ import {
   ProjectRepository,
   ResearchSourceRepository,
   SignalRepository,
+  OpportunityRepository,
 } from '@content-os/storage';
 
 export const storageProviders = [
@@ -19,4 +20,5 @@ export const storageProviders = [
     useFactory: () => new ResearchSourceRepository(),
   },
   { provide: SignalRepository, useFactory: () => new SignalRepository() },
+  { provide: OpportunityRepository, useFactory: () => new OpportunityRepository() },
 ];
