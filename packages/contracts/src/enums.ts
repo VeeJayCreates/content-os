@@ -33,3 +33,5 @@ export enum ResearchSourceType {
   OFFICIAL = "official",
   API = "api",
 }
+
+export enum SignalIngestionStatus { CREATED = "created", DUPLICATE = "duplicate", SKIPPED = "skipped" }

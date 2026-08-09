@@ -6,6 +6,7 @@ export default defineConfig({
     './src/schema/project.ts',
     './src/schema/content.ts',
     './src/schema/research-source.ts',
+    './src/schema/signal.ts',
     './src/schema/job.ts',
     './src/schema/workflow.ts',
   ],

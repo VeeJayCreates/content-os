@@ -1,0 +1,3 @@
+import { sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+export const signals = sqliteTable('signals', { id: text('id').primaryKey(), projectId: text('project_id').notNull(), researchSourceId: text('research_source_id').notNull(), sourceType: text('source_type').notNull(), externalId: text('external_id').notNull(), title: text('title').notNull(), url: text('url').notNull(), summary: text('summary'), publishedAt: text('published_at'), discoveredAt: text('discovered_at').notNull(), createdAt: text('created_at').notNull() }, (table) => [uniqueIndex('signals_source_external_id_unique').on(table.researchSourceId, table.externalId)]);
+export type Signal = typeof signals.$inferSelect; export type NewSignal = typeof signals.$inferInsert;

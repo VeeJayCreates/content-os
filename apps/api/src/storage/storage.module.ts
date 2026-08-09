@@ -5,10 +5,11 @@ import {
   ContentRepository,
   ProjectRepository,
   ResearchSourceRepository,
+  SignalRepository,
 } from '@content-os/storage';
 
 @Module({
   providers: [...storageProviders],
-  exports: [ContentRepository, ProjectRepository, ResearchSourceRepository],
+  exports: [ContentRepository, ProjectRepository, ResearchSourceRepository, SignalRepository],
 })
 export class StorageModule {}

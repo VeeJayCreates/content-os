@@ -1,11 +1,14 @@
 "use client";
 
 import * as React from "react";
-import type { Project, ResearchSource } from "@content-os/contracts";
-import { ExternalLink, RefreshCw, Search, Trash2 } from "lucide-react";
+import Link from "next/link";
+import type { IngestionResult, Project, ResearchSource } from "@content-os/contracts";
+import { ResearchSourceType } from "@content-os/contracts";
+import { ExternalLink, Play, RefreshCw, Search, Trash2 } from "lucide-react";
 import {
   deleteResearchSource,
   getResearchSources,
+  ingestResearchSource,
   ResearchApiError,
   updateResearchSource,
 } from "@/features/research/api/client";
@@ -101,11 +104,16 @@ export function ResearchScreen() {
             and opportunity discovery.
           </p>
         </div>
-        <ResearchSourceFormDialog
-          projects={projects}
-          defaultProjectId={projectId}
-          onCompleted={() => void load()}
-        />
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/research/signals">View signals</Link>
+          </Button>
+          <ResearchSourceFormDialog
+            projects={projects}
+            defaultProjectId={projectId}
+            onCompleted={() => void load()}
+          />
+        </div>
       </div>
       <label className="mb-5 flex max-w-sm flex-col gap-2 text-sm font-medium">
         Project filter
@@ -187,6 +195,22 @@ function SourceCard({
   const [busy, setBusy] = React.useState(false);
   const [open, setOpen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [ingesting, setIngesting] = React.useState(false);
+  const [ingestionResult, setIngestionResult] =
+    React.useState<IngestionResult | null>(null);
+  const isMountedRef = React.useRef(false);
+  const isSupported = [
+    ResearchSourceType.RSS,
+    ResearchSourceType.WEBSITE,
+    ResearchSourceType.OFFICIAL,
+  ].includes(source.sourceType);
+
+  React.useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
   async function toggle() {
     if (busy) return;
     setBusy(true);
@@ -222,10 +246,30 @@ function SourceCard({
       setBusy(false);
     }
   }
+  async function ingest() {
+    if (ingesting || !source.enabled || !isSupported) return;
+    setIngesting(true);
+    setError(null);
+    setIngestionResult(null);
+    try {
+      const result = await ingestResearchSource(source.id);
+      if (isMountedRef.current) setIngestionResult(result);
+    } catch (reason) {
+      if (isMountedRef.current) {
+        setError(
+          reason instanceof ResearchApiError
+            ? reason.message
+            : "Unable to ingest this source.",
+        );
+      }
+    } finally {
+      if (isMountedRef.current) setIngesting(false);
+    }
+  }
   return (
     <Card className="bg-card/60">
       <CardHeader className="gap-3 p-4 sm:p-5">
-        <div className="flex items-start gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
           <Search className="mt-1 size-4 text-primary" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -249,11 +293,22 @@ function SourceCard({
               <ExternalLink className="size-3.5 shrink-0" />
             </a>
           </div>
-          <div className="flex shrink-0">
+          <div className="flex flex-wrap gap-1 sm:shrink-0 sm:justify-end">
+            {source.enabled && isSupported ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy || ingesting}
+                onClick={() => void ingest()}
+              >
+                <Play className="size-3.5" />
+                {ingesting ? "Ingesting…" : "Ingest now"}
+              </Button>
+            ) : null}
             <Button
               variant="ghost"
               size="sm"
-              disabled={busy}
+              disabled={busy || ingesting}
               onClick={() => void toggle()}
             >
               {source.enabled ? "Disable" : "Enable"}
@@ -293,14 +348,14 @@ function SourceCard({
                 <DialogFooter>
                   <Button
                     variant="outline"
-                    disabled={busy}
+                  disabled={busy || ingesting}
                     onClick={() => setOpen(false)}
                   >
                     Cancel
                   </Button>
                   <Button
                     className="bg-red-500 text-white hover:bg-red-500/90"
-                    disabled={busy}
+                    disabled={busy || ingesting}
                     onClick={() => void remove()}
                   >
                     {busy ? "Deleting…" : "Delete source"}
@@ -316,6 +371,38 @@ function SourceCard({
           <p role="alert" className="text-sm text-red-200">
             {error}
           </p>
+        </CardContent>
+      ) : null}
+      {!source.enabled ? (
+        <CardContent className="pt-0">
+          <p className="text-sm text-muted-foreground">
+            Enable this source before ingesting it.
+          </p>
+        </CardContent>
+      ) : null}
+      {source.enabled && !isSupported ? (
+        <CardContent className="pt-0">
+          <p className="text-sm text-muted-foreground">
+            {formatResearchSourceType(source.sourceType)} ingestion is not yet
+            supported.
+          </p>
+        </CardContent>
+      ) : null}
+      {ingestionResult ? (
+        <CardContent className="pt-0">
+          <div className="rounded-md border border-emerald-400/20 bg-emerald-400/5 p-3 text-sm">
+            <p className="font-medium text-emerald-200">Ingestion complete</p>
+            <p className="mt-1 text-muted-foreground">
+              Fetched {ingestionResult.fetchedCount}, created {ingestionResult.createdCount}, duplicates {ingestionResult.duplicateCount}, skipped {ingestionResult.skippedCount}.
+            </p>
+            {ingestionResult.warnings.length > 0 ? (
+              <ul className="mt-2 list-disc pl-5 text-amber-200">
+                {ingestionResult.warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
         </CardContent>
       ) : null}
     </Card>

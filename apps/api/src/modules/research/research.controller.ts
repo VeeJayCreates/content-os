@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Patch,
+  ParseUUIDPipe,
   Post,
   Query,
 } from '@nestjs/common';
@@ -12,11 +13,15 @@ import {
 import { CreateResearchSourceDto } from './dto/create-research-source.dto';
 import { ListResearchSourcesDto } from './dto/list-research-sources.dto';
 import { UpdateResearchSourceDto } from './dto/update-research-source.dto';
+import { IngestionService } from './ingestion.service';
 import { ResearchService } from './research.service';
 
 @Controller('research-sources')
 export class ResearchController {
-  constructor(private readonly researchService: ResearchService) {}
+  constructor(
+    private readonly researchService: ResearchService,
+    private readonly ingestionService: IngestionService,
+  ) {}
 
   @Get()
   getAll(@Query() query: ListResearchSourcesDto) {
@@ -24,8 +29,13 @@ export class ResearchController {
   }
 
   @Get(':id')
-  getOne(@Param('id') id: string) {
+  getOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.researchService.findOne(id);
+  }
+
+  @Post(':id/ingest')
+  ingest(@Param('id', new ParseUUIDPipe()) id: string) {
+    return this.ingestionService.ingest(id);
   }
 
   @Post()
@@ -34,12 +44,15 @@ export class ResearchController {
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdateResearchSourceDto) {
+  update(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: UpdateResearchSourceDto,
+  ) {
     return this.researchService.update(id, dto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  remove(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.researchService.remove(id);
   }
 }

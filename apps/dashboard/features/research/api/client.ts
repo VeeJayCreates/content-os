@@ -2,11 +2,14 @@
 
 import type {
   CreateResearchSourceInput,
+  IngestionResult,
   ResearchSource,
+  Signal,
   UpdateResearchSourceInput,
 } from "@content-os/contracts";
 
-const endpoint = "/api/research-sources";
+const apiEndpoint = "/api";
+const endpoint = `${apiEndpoint}/research-sources`;
 
 export class ResearchApiError extends Error {
   constructor(
@@ -19,7 +22,11 @@ export class ResearchApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${endpoint}${path}`, {
+  return requestUrl<T>(`${endpoint}${path}`, init);
+}
+
+async function requestUrl<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, {
     ...init,
     headers: {
       Accept: "application/json",
@@ -65,4 +72,25 @@ export function deleteResearchSource(id: string) {
   return request<{ success: boolean }>(`/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
+}
+
+export function ingestResearchSource(id: string) {
+  return request<IngestionResult>(`/${encodeURIComponent(id)}/ingest`, {
+    method: "POST",
+  });
+}
+
+export function getSignals(filters?: {
+  projectId?: string;
+  researchSourceId?: string;
+}) {
+  const params = new URLSearchParams();
+
+  if (filters?.projectId) params.set("projectId", filters.projectId);
+  if (filters?.researchSourceId) {
+    params.set("researchSourceId", filters.researchSourceId);
+  }
+
+  const query = params.toString();
+  return requestUrl<Signal[]>(`${apiEndpoint}/signals${query ? `?${query}` : ""}`);
 }
