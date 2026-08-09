@@ -65,3 +65,9 @@ export enum TopicSelectionDecision {
   HOLD = "hold",
   REJECTED = "rejected",
 }
+
+export enum EditorialTimelinessPreference {
+  BREAKING = "breaking",
+  BALANCED = "balanced",
+  EVERGREEN = "evergreen",
+}

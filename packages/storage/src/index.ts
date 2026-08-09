@@ -1,5 +1,6 @@
 export * from "./db.js";
 export * from "./schema/project.js";
+export * from "./schema/project-editorial-profile.js";
 export * from "./schema/content.js";
 export * from "./schema/research-source.js";
 export * from "./schema/signal.js";
@@ -10,6 +11,7 @@ export * from "./schema/topic-selection.js";
 export * from "./schema/workflow.js";
 export * from "./schema/job.js";
 export * from "./repositories/project.repository.js";
+export * from "./repositories/project-editorial-profile.repository.js";
 export * from "./repositories/content.repository.js";
 export * from "./repositories/research-source.repository.js";
 export * from "./repositories/signal.repository.js";

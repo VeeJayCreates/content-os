@@ -4,6 +4,7 @@ import { storageProviders } from './storage.providers';
 import {
   ContentRepository,
   ProjectRepository,
+  ProjectEditorialProfileRepository,
   ResearchSourceRepository,
   SignalRepository,
   OpportunityRepository,
@@ -17,6 +18,7 @@ import {
   exports: [
     ContentRepository,
     ProjectRepository,
+    ProjectEditorialProfileRepository,
     ResearchSourceRepository,
     SignalRepository,
     OpportunityRepository,

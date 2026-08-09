@@ -5,6 +5,7 @@ import {
   SignalRepository,
   OpportunityRepository,
   OpportunityMetricRepository,
+  ProjectEditorialProfileRepository,
   ResearchPackageRepository,
   TopicSelectionRepository,
 } from '@content-os/storage';
@@ -13,6 +14,10 @@ export const storageProviders = [
   {
     provide: ProjectRepository,
     useFactory: () => new ProjectRepository(),
+  },
+  {
+    provide: ProjectEditorialProfileRepository,
+    useFactory: () => new ProjectEditorialProfileRepository(),
   },
   {
     provide: ContentRepository,

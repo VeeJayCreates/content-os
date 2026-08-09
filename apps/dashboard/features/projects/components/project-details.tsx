@@ -6,6 +6,7 @@ import { ArrowLeft, CalendarDays, FolderKanban } from "lucide-react";
 import { formatContentType, formatProjectDate, formatProjectStatus, getStatusVariant } from "@/features/projects/project-utils";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ProjectEditorialProfileEditor } from "@/features/projects/components/project-editorial-profile";
 
 type ProjectDetailsProps = {
   project: Project;
@@ -36,6 +37,7 @@ export function ProjectDetails({ project }: ProjectDetailsProps) {
           <Metadata label="Last updated" value={formatProjectDate(project.updatedAt)} icon={<CalendarDays className="size-3.5" />} />
         </CardContent>
       </Card>
+      <ProjectEditorialProfileEditor key={project.id} projectId={project.id} />
     </section>
   );
 }

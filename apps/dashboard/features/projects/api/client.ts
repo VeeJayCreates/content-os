@@ -1,6 +1,11 @@
 "use client";
 
-import type { CreateProjectInput, Project } from "@content-os/contracts";
+import type {
+  CreateProjectInput,
+  Project,
+  ProjectEditorialProfile,
+  ProjectEditorialProfileUpdateInput,
+} from "@content-os/contracts";
 
 const projectsEndpoint = "/api/projects";
 
@@ -62,4 +67,39 @@ export function deleteProject(id: string) {
   return request<{ success: boolean }>(`/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
+}
+
+export function getProjectEditorialProfile(projectId: string) {
+  return request<ProjectEditorialProfile>(
+    `/${encodeURIComponent(projectId)}/editorial-profile`,
+  );
+}
+
+export function toProjectEditorialProfileUpdateInput(
+  profile: ProjectEditorialProfile,
+): ProjectEditorialProfileUpdateInput {
+  return {
+    mission: profile.mission,
+    targetAudience: profile.targetAudience,
+    primaryLanguage: profile.primaryLanguage,
+    primaryGeography: profile.primaryGeography,
+    topicThemes: profile.topicThemes,
+    excludedTopics: profile.excludedTopics,
+    contentGoals: profile.contentGoals,
+    preferredFormats: profile.preferredFormats,
+    timelinessPreference: profile.timelinessPreference,
+  };
+}
+
+export function updateProjectEditorialProfile(
+  projectId: string,
+  profile: ProjectEditorialProfileUpdateInput,
+) {
+  return request<ProjectEditorialProfile>(
+    `/${encodeURIComponent(projectId)}/editorial-profile`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(profile),
+    },
+  );
 }
