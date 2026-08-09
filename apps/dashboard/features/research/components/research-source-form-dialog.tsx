@@ -40,6 +40,9 @@ export function ResearchSourceFormDialog({
   const [open, setOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [sourceType, setSourceType] = React.useState<ResearchSourceType | "">(
+    source?.sourceType ?? "",
+  );
   const editing = Boolean(source);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,7 +50,7 @@ export function ResearchSourceFormDialog({
     const form = new FormData(event.currentTarget);
     const projectId = String(form.get("projectId") ?? "");
     const name = String(form.get("name") ?? "").trim();
-    const sourceType = String(
+    const selectedSourceType = String(
       form.get("sourceType") ?? "",
     ) as ResearchSourceType;
     const url = String(form.get("url") ?? "").trim();
@@ -56,7 +59,7 @@ export function ResearchSourceFormDialog({
       !projectId ||
       !name ||
       !url ||
-      !Object.values(ResearchSourceType).includes(sourceType)
+      !Object.values(ResearchSourceType).includes(selectedSourceType)
     ) {
       setError("Complete all required fields with a valid source type.");
       return;
@@ -75,7 +78,7 @@ export function ResearchSourceFormDialog({
     const input: CreateResearchSourceInput = {
       projectId,
       name,
-      sourceType,
+      sourceType: selectedSourceType,
       url,
       enabled,
     };
@@ -169,7 +172,10 @@ export function ResearchSourceFormDialog({
               Source type
               <select
                 name="sourceType"
-                defaultValue={source?.sourceType ?? ""}
+                value={sourceType}
+                onChange={(event) =>
+                  setSourceType(event.target.value as ResearchSourceType | "")
+                }
                 disabled={busy}
                 required
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm"
@@ -206,6 +212,13 @@ export function ResearchSourceFormDialog({
               required
               placeholder="https://example.com/feed"
             />
+            {sourceType === ResearchSourceType.YOUTUBE ? (
+              <span className="text-xs font-normal leading-5 text-muted-foreground">
+                Use a specific YouTube channel: https://www.youtube.com/@handle
+                or https://www.youtube.com/channel/&lt;channelId&gt;. Video,
+                playlist, Shorts, and generic YouTube URLs are not supported.
+              </span>
+            ) : null}
           </label>
           {error ? (
             <p

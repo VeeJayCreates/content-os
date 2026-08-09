@@ -1,22 +1,292 @@
-import { BadRequestException, Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
+import { ResearchSourceType } from '@content-os/contracts';
 import type { IngestionResult } from '@content-os/contracts';
 import { ResearchSourceRepository, SignalRepository } from '@content-os/storage';
 
-type Item = { externalId?: string; title: string; url: string; summary?: string; publishedAt?: string };
+import { YouTubeIngestionAdapter } from './youtube-ingestion.adapter';
+
+export interface IngestionItem {
+  externalId?: string;
+  title: string;
+  url: string;
+  summary?: string | null;
+  publishedAt?: string;
+}
+
 @Injectable()
 export class IngestionService {
-  constructor(private readonly sources: ResearchSourceRepository, private readonly signals: SignalRepository) {}
-  async ingest(id: string): Promise<IngestionResult> { const source = await this.sources.findById(id); if (!source) throw new NotFoundException('Research source not found'); if (!source.enabled) throw new BadRequestException('Research source is disabled'); this.assertSafeUrl(source.url); const items = await this.fetchItems(source.sourceType, source.url); const result: IngestionResult = { fetchedCount: items.length, createdCount: 0, duplicateCount: 0, skippedCount: 0, warnings: [] }; for (const item of items) { const externalId = item.externalId || createHash('sha256').update(`${item.url}|${item.title}`).digest('hex'); let outcome; try { outcome = await this.signals.create({ projectId: source.projectId, researchSourceId: source.id, sourceType: source.sourceType, externalId, title: item.title, url: item.url, summary: item.summary ?? null, publishedAt: item.publishedAt ?? null, discoveredAt: new Date().toISOString() }); } catch { throw new InternalServerErrorException('Unable to persist ingested signals'); } if (outcome === 'created') result.createdCount++; else result.duplicateCount++; } return result; }
-  private async fetchItems(type: string, url: string): Promise<Item[]> { if (!['rss','website','official'].includes(type)) throw new BadRequestException(`Source type '${type}' is not supported for ingestion`); const controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), 10000); try { const response = await this.fetchSafe(url, controller.signal, type === 'rss' ? 'application/rss+xml, application/atom+xml, application/xml' : 'text/html'); if (!response.ok) throw new BadRequestException(`Upstream source returned ${response.status}`); const length = Number(response.headers.get('content-length') ?? 0); if (length > 1_000_000) throw new BadRequestException('Upstream response is too large'); const text = (await response.text()).slice(0, 1_000_001); if (text.length > 1_000_000) throw new BadRequestException('Upstream response is too large'); return type === 'rss' ? this.parseFeed(text) : this.parseHtml(text, url); } catch (error) { if (error instanceof BadRequestException) throw error; throw new BadRequestException('Unable to fetch the research source'); } finally { clearTimeout(timeout); } }
-  private parseFeed(xml: string): Item[] { const blocks = xml.match(/<(item|entry)\b[\s\S]*?<\/\1>/gi) ?? []; if (!blocks.length) throw new BadRequestException('The source did not contain RSS or Atom entries'); return blocks.slice(0, 50).map((block) => { const title = this.tag(block, 'title') || 'Untitled signal'; const link = this.tag(block, 'link') || this.attr(block, 'link', 'href') || ''; if (!link) throw new BadRequestException('A feed entry is missing a URL'); return { externalId: this.tag(block, 'guid') || this.tag(block, 'id'), title, url: link, summary: this.tag(block, 'description') || this.tag(block, 'summary'), publishedAt: this.tag(block, 'pubDate') || this.tag(block, 'published') }; }); }
-  private parseHtml(html: string, url: string): Item[] { const title = this.tag(html, 'title') || 'Untitled source'; const description = this.meta(html, 'description') || this.meta(html, 'og:description'); return [{ title, url: this.meta(html, 'og:url') || url, summary: description }]; }
-  private tag(value: string, tag: string) { const match = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i').exec(value); return match?.[1]?.replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]+>/g, '').trim(); }
-  private attr(value: string, tag: string, attr: string) { return new RegExp(`<${tag}[^>]*${attr}=["']([^"']+)`, 'i').exec(value)?.[1]; }
-  private meta(value: string, key: string) { return new RegExp(`<meta[^>]+(?:name|property)=["']${key}["'][^>]+content=["']([^"']+)`, 'i').exec(value)?.[1]; }
-  private assertSafeUrl(value: string) { let url: URL; try { url = new URL(value); } catch { throw new BadRequestException('Research source URL is invalid'); } if (!['http:','https:'].includes(url.protocol) || /(^localhost$|\.local$|^127\.|^10\.|^192\.168\.|^169\.254\.|^172\.(1[6-9]|2\d|3[0-1])\.|^\[?::1\]?$)/i.test(url.hostname)) throw new BadRequestException('Research source URL is not permitted'); }
-  private async fetchSafe(url: string, signal: AbortSignal, accept: string, redirects = 0): Promise<Response> { await this.assertResolvedPublic(url); const response = await fetch(url, { signal, redirect: 'manual', headers: { Accept: accept } }); if ([301, 302, 303, 307, 308].includes(response.status)) { if (redirects >= 3) throw new BadRequestException('Too many upstream redirects'); const location = response.headers.get('location'); if (!location) throw new BadRequestException('Upstream redirect is invalid'); return this.fetchSafe(new URL(location, url).toString(), signal, accept, redirects + 1); } return response; }
-  private async assertResolvedPublic(value: string) { this.assertSafeUrl(value); try { const addresses = await lookup(new URL(value).hostname, { all: true, verbatim: true }); if (addresses.some(({ address }) => this.isPrivateAddress(address))) throw new BadRequestException('Research source URL is not permitted'); } catch (error) { if (error instanceof BadRequestException) throw error; throw new BadRequestException('Unable to resolve research source host'); } }
-  private isPrivateAddress(address: string) { const normalized = address.toLowerCase(); if (normalized.startsWith('::ffff:')) return this.isPrivateAddress(normalized.slice(7)); if (normalized === '::1' || /^(fc|fd)/.test(normalized) || /^fe[89ab][0-9a-f]:/.test(normalized)) return true; const parts = normalized.split('.').map(Number); if (parts.length !== 4 || parts.some(Number.isNaN)) return false; const [first, second] = parts; return first === 127 || first === 10 || (first === 172 && second >= 16 && second <= 31) || (first === 192 && second === 168) || (first === 169 && second === 254); }
+  constructor(
+    private readonly sources: ResearchSourceRepository,
+    private readonly signals: SignalRepository,
+    private readonly youtubeIngestionAdapter: YouTubeIngestionAdapter,
+  ) {}
+
+  async ingest(id: string): Promise<IngestionResult> {
+    const source = await this.sources.findById(id);
+    if (!source) {
+      throw new NotFoundException('Research source not found');
+    }
+    if (!source.enabled) {
+      throw new BadRequestException('Research source is disabled');
+    }
+
+    this.assertSafeUrl(source.url);
+    const items = await this.fetchItems(source.sourceType, source.url);
+    const result: IngestionResult = {
+      fetchedCount: items.length,
+      createdCount: 0,
+      duplicateCount: 0,
+      skippedCount: 0,
+      warnings: [],
+    };
+
+    for (const item of items) {
+      const externalId =
+        item.externalId ??
+        createHash('sha256')
+          .update(`${item.url}|${item.title}`)
+          .digest('hex');
+
+      let outcome;
+      try {
+        outcome = await this.signals.create({
+          projectId: source.projectId,
+          researchSourceId: source.id,
+          sourceType: source.sourceType,
+          externalId,
+          title: item.title,
+          url: item.url,
+          summary: item.summary ?? null,
+          publishedAt: item.publishedAt ?? null,
+          discoveredAt: new Date().toISOString(),
+        });
+      } catch {
+        throw new InternalServerErrorException('Unable to persist ingested signals');
+      }
+
+      if (outcome === 'created') {
+        result.createdCount += 1;
+      } else {
+        result.duplicateCount += 1;
+      }
+    }
+
+    return result;
+  }
+
+  private async fetchItems(type: string, url: string): Promise<IngestionItem[]> {
+    if (type === ResearchSourceType.YOUTUBE) {
+      return this.youtubeIngestionAdapter.fetchItems(url);
+    }
+
+    if (!['rss', 'website', 'official'].includes(type)) {
+      throw new BadRequestException(
+        `Source type '${type}' is not supported for ingestion`,
+      );
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+
+    try {
+      const response = await this.fetchSafe(
+        url,
+        controller.signal,
+        type === 'rss'
+          ? 'application/rss+xml, application/atom+xml, application/xml'
+          : 'text/html',
+      );
+      if (!response.ok) {
+        throw new BadRequestException(`Upstream source returned ${response.status}`);
+      }
+
+      const length = Number(response.headers.get('content-length') ?? 0);
+      if (length > 1_000_000) {
+        throw new BadRequestException('Upstream response is too large');
+      }
+
+      const text = (await response.text()).slice(0, 1_000_001);
+      if (text.length > 1_000_000) {
+        throw new BadRequestException('Upstream response is too large');
+      }
+
+      return type === 'rss' ? this.parseFeed(text) : this.parseHtml(text, url);
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new BadRequestException('Unable to fetch the research source');
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private parseFeed(xml: string): IngestionItem[] {
+    const blocks = xml.match(/<(item|entry)\b[\s\S]*?<\/\1>/gi) ?? [];
+    if (!blocks.length) {
+      throw new BadRequestException('The source did not contain RSS or Atom entries');
+    }
+
+    return blocks.slice(0, 50).map((block) => {
+      const title = this.tag(block, 'title') || 'Untitled signal';
+      const link = this.tag(block, 'link') || this.attr(block, 'link', 'href') || '';
+      if (!link) {
+        throw new BadRequestException('A feed entry is missing a URL');
+      }
+
+      return {
+        externalId: this.tag(block, 'guid') || this.tag(block, 'id'),
+        title,
+        url: link,
+        summary: this.tag(block, 'description') || this.tag(block, 'summary'),
+        publishedAt: this.tag(block, 'pubDate') || this.tag(block, 'published'),
+      };
+    });
+  }
+
+  private parseHtml(html: string, url: string): IngestionItem[] {
+    const title = this.tag(html, 'title') || 'Untitled source';
+    const description =
+      this.meta(html, 'description') || this.meta(html, 'og:description');
+
+    return [
+      {
+        title,
+        url: this.meta(html, 'og:url') || url,
+        summary: description,
+      },
+    ];
+  }
+
+  private tag(value: string, tag: string) {
+    const match = new RegExp(
+      `<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`,
+      'i',
+    ).exec(value);
+    return match?.[1]
+      ?.replace(/<!\[CDATA\[|\]\]>/g, '')
+      .replace(/<[^>]+>/g, '')
+      .trim();
+  }
+
+  private attr(value: string, tag: string, attr: string) {
+    return new RegExp(`<${tag}[^>]*${attr}=["']([^"']+)`, 'i').exec(
+      value,
+    )?.[1];
+  }
+
+  private meta(value: string, key: string) {
+    return new RegExp(
+      `<meta[^>]+(?:name|property)=["']${key}["'][^>]+content=["']([^"']+)`,
+      'i',
+    ).exec(value)?.[1];
+  }
+
+  private assertSafeUrl(value: string) {
+    let url: URL;
+    try {
+      url = new URL(value);
+    } catch {
+      throw new BadRequestException('Research source URL is invalid');
+    }
+
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      /(^localhost$|\.local$|^127\.|^10\.|^192\.168\.|^169\.254\.|^172\.(1[6-9]|2\d|3[0-1])\.|^\[?::1\]?$)/i.test(
+        url.hostname,
+      )
+    ) {
+      throw new BadRequestException('Research source URL is not permitted');
+    }
+  }
+
+  private async fetchSafe(
+    url: string,
+    signal: AbortSignal,
+    accept: string,
+    redirects = 0,
+  ): Promise<Response> {
+    await this.assertResolvedPublic(url);
+    const response = await fetch(url, {
+      signal,
+      redirect: 'manual',
+      headers: { Accept: accept },
+    });
+
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      if (redirects >= 3) {
+        throw new BadRequestException('Too many upstream redirects');
+      }
+
+      const location = response.headers.get('location');
+      if (!location) {
+        throw new BadRequestException('Upstream redirect is invalid');
+      }
+
+      return this.fetchSafe(
+        new URL(location, url).toString(),
+        signal,
+        accept,
+        redirects + 1,
+      );
+    }
+
+    return response;
+  }
+
+  private async assertResolvedPublic(value: string) {
+    this.assertSafeUrl(value);
+
+    try {
+      const addresses = await lookup(new URL(value).hostname, {
+        all: true,
+        verbatim: true,
+      });
+      if (addresses.some(({ address }) => this.isPrivateAddress(address))) {
+        throw new BadRequestException('Research source URL is not permitted');
+      }
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new BadRequestException('Unable to resolve research source host');
+    }
+  }
+
+  private isPrivateAddress(address: string) {
+    const normalized = address.toLowerCase();
+    if (normalized.startsWith('::ffff:')) {
+      return this.isPrivateAddress(normalized.slice(7));
+    }
+    if (
+      normalized === '::1' ||
+      /^(fc|fd)/.test(normalized) ||
+      /^fe[89ab][0-9a-f]:/.test(normalized)
+    ) {
+      return true;
+    }
+
+    const parts = normalized.split('.').map(Number);
+    if (parts.length !== 4 || parts.some(Number.isNaN)) {
+      return false;
+    }
+
+    const [first, second] = parts;
+    return (
+      first === 127 ||
+      first === 10 ||
+      (first === 172 && second >= 16 && second <= 31) ||
+      (first === 192 && second === 168) ||
+      (first === 169 && second === 254)
+    );
+  }
 }

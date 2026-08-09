@@ -3,7 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { ResearchSource, ResearchSourceType } from '@content-os/contracts';
+import { ResearchSourceType } from '@content-os/contracts';
+import type { ResearchSource } from '@content-os/contracts';
 import {
   ProjectRepository,
   ResearchSourceRepository,
@@ -12,12 +13,14 @@ import {
 
 import { CreateResearchSourceDto } from './dto/create-research-source.dto';
 import { UpdateResearchSourceDto } from './dto/update-research-source.dto';
+import { YouTubeChannelResolver } from './youtube-channel-resolver';
 
 @Injectable()
 export class ResearchService {
   constructor(
     private readonly researchSourceRepository: ResearchSourceRepository,
     private readonly projectRepository: ProjectRepository,
+    private readonly youtubeChannelResolver: YouTubeChannelResolver,
   ) {}
 
   async findAll(projectId?: string): Promise<ResearchSource[]> {
@@ -39,6 +42,7 @@ export class ResearchService {
   async create(dto: CreateResearchSourceDto): Promise<ResearchSource> {
     await this.ensureProjectExists(dto.projectId);
     const url = dto.url.trim();
+    this.validateSourceUrl(dto.sourceType, url);
     await this.ensureUniqueUrl(dto.projectId, url);
 
     const record = await this.researchSourceRepository.create({
@@ -64,10 +68,13 @@ export class ResearchService {
 
     const projectId = dto.projectId ?? existing.projectId;
     const url = dto.url?.trim() ?? existing.url;
+    const sourceType = dto.sourceType ?? (existing.sourceType as ResearchSourceType);
 
     if (dto.projectId && dto.projectId !== existing.projectId) {
       await this.ensureProjectExists(dto.projectId);
     }
+
+    this.validateSourceUrl(sourceType, url);
 
     if (projectId !== existing.projectId || url !== existing.url) {
       await this.ensureUniqueUrl(projectId, url, id);
@@ -118,6 +125,12 @@ export class ResearchService {
       throw new ConflictException(
         'A research source with this URL already exists for the project',
       );
+    }
+  }
+
+  private validateSourceUrl(sourceType: ResearchSourceType, url: string) {
+    if (sourceType === ResearchSourceType.YOUTUBE) {
+      this.youtubeChannelResolver.validate(url);
     }
   }
 

@@ -87,4 +87,57 @@ describe('OpportunityDetectionService', () => {
     expect(secondAggregate).toEqual(firstAggregate);
     expect(linkedSignalIds).toEqual(new Set([firstSignal.id, secondSignal.id]));
   });
+
+  it('keeps distinct YouTube videos in separate URL clusters across repeated detection', async () => {
+    const videos = [
+      { ...firstSignal, id: 'video-signal-1', title: 'First distinct video', url: 'https://www.youtube.com/watch?v=AAA&utm_source=x', externalId: 'AAA' },
+      { ...secondSignal, id: 'video-signal-2', title: 'Second distinct video', url: 'https://www.youtube.com/watch?v=BBB&utm_campaign=y', externalId: 'BBB' },
+    ];
+    const candidates: typeof existingOpportunity[] = [];
+    const links = new Map<string, Set<string>>();
+    const signals = { findAll: jest.fn().mockResolvedValue(videos) };
+    const opportunities = {
+      findAll: jest.fn().mockImplementation(() => candidates),
+      create: jest.fn(async (data) => {
+        return {
+          ...existingOpportunity,
+          ...data,
+          id: `opportunity-${candidates.length + 1}`,
+        };
+      }),
+      update: jest.fn(async (id, data) => {
+        const opportunity = candidates.find((candidate) => candidate.id === id);
+        if (!opportunity) return undefined;
+        Object.assign(opportunity, data);
+        return opportunity;
+      }),
+      attachSignal: jest.fn(async (opportunityId: string, signalId: string) => {
+        const signalIds = links.get(opportunityId) ?? new Set<string>();
+        if (signalIds.has(signalId)) return false;
+        signalIds.add(signalId);
+        links.set(opportunityId, signalIds);
+        return true;
+      }),
+      findSignalsByOpportunityIds: jest.fn(async (ids: string[]) =>
+        new Map(
+          ids.map((id) => [
+            id,
+            videos.filter((video) => links.get(id)?.has(video.id)),
+          ]),
+        ),
+      ),
+    };
+    const service = new OpportunityDetectionService(signals as never, opportunities as never);
+
+    const firstRun = await service.detect('project-1');
+    const secondRun = await service.detect('project-1');
+
+    expect(firstRun).toMatchObject({ opportunitiesCreated: 2, linksCreated: 2 });
+    expect(secondRun).toMatchObject({ opportunitiesCreated: 0, linksCreated: 0 });
+    expect(candidates.map((candidate) => candidate.clusterKey).sort()).toEqual([
+      'url:https://www.youtube.com/watch?v=AAA',
+      'url:https://www.youtube.com/watch?v=BBB',
+    ]);
+    expect([...links.values()].map((signalIds) => signalIds.size)).toEqual([1, 1]);
+  });
 });

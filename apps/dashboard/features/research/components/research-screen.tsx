@@ -206,6 +206,7 @@ function SourceCard({
     ResearchSourceType.RSS,
     ResearchSourceType.WEBSITE,
     ResearchSourceType.OFFICIAL,
+    ResearchSourceType.YOUTUBE,
   ].includes(source.sourceType);
 
   React.useEffect(() => {

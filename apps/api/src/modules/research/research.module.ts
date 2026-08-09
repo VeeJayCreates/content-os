@@ -13,6 +13,8 @@ import { ResearchPackageController } from './research-package.controller';
 import { ResearchPackageService } from './research-package.service';
 import { TopicSelectionController } from './topic-selection.controller';
 import { TopicSelectionService } from './topic-selection.service';
+import { YouTubeChannelResolver } from './youtube-channel-resolver';
+import { YouTubeIngestionAdapter } from './youtube-ingestion.adapter';
 
 @Module({
   imports: [StorageModule],
@@ -31,6 +33,8 @@ import { TopicSelectionService } from './topic-selection.service';
     OpportunityService,
     ResearchPackageService,
     TopicSelectionService,
+    YouTubeChannelResolver,
+    YouTubeIngestionAdapter,
   ],
 })
 export class ResearchModule {}

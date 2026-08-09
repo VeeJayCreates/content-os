@@ -1,4 +1,4 @@
-import { clusterKey, scoreOpportunity, titlesMatch } from './opportunity-detection';
+import { clusterKey, normalizeUrl, scoreOpportunity, titlesMatch } from './opportunity-detection';
 
 const recent = new Date().toISOString();
 const stale = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
@@ -18,6 +18,27 @@ describe('opportunity detection logic', () => {
 
   it('uses canonical URL regardless of title variation', () => {
     expect(clusterKey(signal({ title: 'First title' }))).toBe(clusterKey(signal({ title: 'Completely different title', url: 'https://example.com/story?other=2#section' })));
+  });
+
+  it('preserves a YouTube video ID while removing tracking parameters', () => {
+    expect(normalizeUrl('https://www.youtube.com/watch?v=AAA')).not.toBe(
+      normalizeUrl('https://www.youtube.com/watch?v=BBB'),
+    );
+    expect(
+      normalizeUrl('https://www.youtube.com/watch?v=AAA&utm_source=x'),
+    ).toBe('https://www.youtube.com/watch?v=AAA');
+    expect(
+      normalizeUrl('https://www.youtube.com/watch?v=AAA&utm_campaign=y'),
+    ).toBe('https://www.youtube.com/watch?v=AAA');
+  });
+
+  it('keeps news URL normalization stable for tracking and fragments', () => {
+    expect(
+      normalizeUrl('https://news.example.com/story?utm_source=x#section'),
+    ).toBe('https://news.example.com/story');
+    expect(clusterKey(signal({ url: 'https://news.example.com/story#one' }))).toBe(
+      clusterKey(signal({ id: 'signal-2', url: 'https://news.example.com/story#two' })),
+    );
   });
 
   it('keeps scores within bounds and rewards fresh multi-source signals', () => {

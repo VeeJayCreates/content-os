@@ -10,6 +10,7 @@ export type DetectionSignal = {
 
 const STOP_WORDS = new Set(['a', 'an', 'and', 'for', 'from', 'in', 'of', 'on', 'the', 'to', 'with']);
 const GENERIC_WORDS = new Set(['ai', 'election', 'government', 'india', 'news', 'update', 'war']);
+const YOUTUBE_HOSTS = new Set(['www.youtube.com', 'youtube.com']);
 
 export function normalizeTitle(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((word) => word && !STOP_WORDS.has(word)).join(' ');
@@ -17,13 +18,37 @@ export function normalizeTitle(value: string): string {
 
 export function clusterKey(signal: DetectionSignal): string {
   try {
-    const url = new URL(signal.url);
-    url.hash = '';
-    url.search = '';
-    return `url:${url.toString()}`;
+    return `url:${normalizeUrl(signal.url)}`;
   } catch {
     return `title:${normalizeTitle(signal.title)}`;
   }
+}
+
+export function normalizeUrl(value: string): string {
+  const url = new URL(value);
+  url.hash = '';
+  url.hostname = url.hostname.toLowerCase();
+  url.pathname = url.pathname.replace(/\/+$/, '') || '/';
+
+  const identityParameters = identityQueryParameters(url);
+  const entries = [...url.searchParams.entries()]
+    .filter(([name]) => identityParameters.has(name))
+    .sort(([leftName, leftValue], [rightName, rightValue]) =>
+      leftName === rightName
+        ? leftValue.localeCompare(rightValue)
+        : leftName.localeCompare(rightName),
+    );
+  url.search = new URLSearchParams(entries).toString();
+
+  return url.toString();
+}
+
+function identityQueryParameters(url: URL): ReadonlySet<string> {
+  if (YOUTUBE_HOSTS.has(url.hostname) && url.pathname === '/watch') {
+    return new Set(['v']);
+  }
+
+  return new Set();
 }
 
 export function titleSimilarity(left: string, right: string): number {
