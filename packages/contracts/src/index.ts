@@ -3,6 +3,7 @@ export * from "./content.js";
 export * from "./research-source.js";
 export * from "./signal.js";
 export * from "./opportunity.js";
+export * from "./research-package.js";
 export * from "./workflow.js";
 export * from "./job.js";
 export * from "./scene.js";

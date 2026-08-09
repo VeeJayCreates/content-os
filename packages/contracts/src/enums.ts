@@ -34,11 +34,28 @@ export enum ResearchSourceType {
   API = "api",
 }
 
-export enum SignalIngestionStatus { CREATED = "created", DUPLICATE = "duplicate", SKIPPED = "skipped" }
+export enum SignalIngestionStatus {
+  CREATED = "created",
+  DUPLICATE = "duplicate",
+  SKIPPED = "skipped",
+}
 
 export enum OpportunityStatus {
   DETECTED = "detected",
   SHORTLISTED = "shortlisted",
   REJECTED = "rejected",
   CONVERTED = "converted",
+}
+
+export enum ResearchPackageStatus {
+  PENDING = "pending",
+  READY = "ready",
+  NEEDS_REVIEW = "needs_review",
+  FAILED = "failed",
+}
+
+export enum ResearchFactStatus {
+  SUPPORTED = "supported",
+  CONFLICTING = "conflicting",
+  UNVERIFIED = "unverified",
 }

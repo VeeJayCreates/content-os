@@ -6,6 +6,8 @@ import type {
   Opportunity,
   OpportunityDetectionResult,
   OpportunityStatus,
+  ResearchPackageDetail,
+  ResearchPackageGenerationResult,
   ResearchSource,
   Signal,
   UpdateResearchSourceInput,
@@ -95,17 +97,40 @@ export function getSignals(filters?: {
   }
 
   const query = params.toString();
-  return requestUrl<Signal[]>(`${apiEndpoint}/signals${query ? `?${query}` : ""}`);
+  return requestUrl<Signal[]>(
+    `${apiEndpoint}/signals${query ? `?${query}` : ""}`,
+  );
 }
 
 export function getOpportunities(projectId?: string) {
-  return requestUrl<Opportunity[]>(`${apiEndpoint}/opportunities${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`);
+  return requestUrl<Opportunity[]>(
+    `${apiEndpoint}/opportunities${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`,
+  );
 }
 
 export function detectOpportunities(projectId?: string) {
-  return requestUrl<OpportunityDetectionResult>(`${apiEndpoint}/opportunities/detect`, { method: "POST", body: JSON.stringify(projectId ? { projectId } : {}) });
+  return requestUrl<OpportunityDetectionResult>(
+    `${apiEndpoint}/opportunities/detect`,
+    { method: "POST", body: JSON.stringify(projectId ? { projectId } : {}) },
+  );
 }
 
 export function updateOpportunityStatus(id: string, status: OpportunityStatus) {
-  return requestUrl<Opportunity>(`${apiEndpoint}/opportunities/${encodeURIComponent(id)}/status`, { method: "PATCH", body: JSON.stringify({ status }) });
+  return requestUrl<Opportunity>(
+    `${apiEndpoint}/opportunities/${encodeURIComponent(id)}/status`,
+    { method: "PATCH", body: JSON.stringify({ status }) },
+  );
+}
+
+export function buildResearchPackage(opportunityId: string) {
+  return requestUrl<ResearchPackageGenerationResult>(
+    `${apiEndpoint}/opportunities/${encodeURIComponent(opportunityId)}/research`,
+    { method: "POST" },
+  );
+}
+
+export function getResearchPackage(id: string) {
+  return requestUrl<ResearchPackageDetail>(
+    `${apiEndpoint}/research-packages/${encodeURIComponent(id)}`,
+  );
 }
