@@ -1,0 +1,5 @@
+import { randomUUID } from 'node:crypto'; import { and, eq } from 'drizzle-orm'; import { db } from '../db.js'; import { editorialAssessments, NewEditorialAssessment, EditorialAssessment } from '../schema/editorial-assessment.js';
+export class EditorialAssessmentRepository {
+ async find(projectId:string, opportunityId:string):Promise<EditorialAssessment|undefined>{const rows=await db.select().from(editorialAssessments).where(and(eq(editorialAssessments.projectId,projectId),eq(editorialAssessments.opportunityId,opportunityId)));return rows[0];}
+ async upsert(data:Omit<NewEditorialAssessment,'id'|'createdAt'|'updatedAt'>):Promise<EditorialAssessment>{const now=new Date().toISOString(); const row:NewEditorialAssessment={id:randomUUID(),createdAt:now,updatedAt:now,...data};await db.insert(editorialAssessments).values(row).onConflictDoUpdate({target:[editorialAssessments.projectId,editorialAssessments.opportunityId],set:{...data,updatedAt:now}});const stored=await this.find(data.projectId,data.opportunityId);if(!stored)throw new Error('Unable to persist editorial assessment');return stored;}
+}

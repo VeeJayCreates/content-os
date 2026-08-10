@@ -15,6 +15,9 @@ import { TopicSelectionController } from './topic-selection.controller';
 import { TopicSelectionService } from './topic-selection.service';
 import { YouTubeChannelResolver } from './youtube-channel-resolver';
 import { YouTubeIngestionAdapter } from './youtube-ingestion.adapter';
+import { EditorialAssessmentController } from './editorial-assessment.controller';
+import { EditorialAssessmentService } from './editorial-assessment.service';
+import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } from './editorial-assessment.evaluator';
 
 @Module({
   imports: [StorageModule],
@@ -24,6 +27,7 @@ import { YouTubeIngestionAdapter } from './youtube-ingestion.adapter';
     OpportunityController,
     ResearchPackageController,
     TopicSelectionController,
+    EditorialAssessmentController,
   ],
   providers: [
     ResearchService,
@@ -35,6 +39,9 @@ import { YouTubeIngestionAdapter } from './youtube-ingestion.adapter';
     TopicSelectionService,
     YouTubeChannelResolver,
     YouTubeIngestionAdapter,
+    EditorialAssessmentService,
+    OpenAiEditorialAssessmentEvaluator,
+    { provide: EDITORIAL_ASSESSMENT_EVALUATOR, useExisting: OpenAiEditorialAssessmentEvaluator },
   ],
 })
 export class ResearchModule {}

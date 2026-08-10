@@ -22,6 +22,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { EditorialAssessmentPanel } from "@/features/research/components/editorial-assessment-panel";
 
 export function ResearchPackageScreen({ packageId }: { packageId: string }) {
   const [researchPackage, setResearchPackage] =
@@ -125,6 +126,7 @@ export function ResearchPackageScreen({ packageId }: { packageId: string }) {
           value={formatResearchDate(researchPackage.updatedAt)}
         />
       </div>
+      <EditorialAssessmentPanel opportunityId={researchPackage.opportunityId} />
       <Card className="mt-6">
         <CardHeader>
           <CardTitle>Evidence-backed claims</CardTitle>

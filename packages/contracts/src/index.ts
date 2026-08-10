@@ -1,5 +1,6 @@
 export * from "./project.js";
 export * from "./project-editorial-profile.js";
+export * from "./editorial-assessment.js";
 export * from "./content.js";
 export * from "./research-source.js";
 export * from "./signal.js";

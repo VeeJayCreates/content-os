@@ -5,6 +5,7 @@ import {
   SignalRepository,
   OpportunityRepository,
   OpportunityMetricRepository,
+  EditorialAssessmentRepository,
   ProjectEditorialProfileRepository,
   ResearchPackageRepository,
   TopicSelectionRepository,
@@ -36,6 +37,7 @@ export const storageProviders = [
     provide: OpportunityMetricRepository,
     useFactory: () => new OpportunityMetricRepository(),
   },
+  { provide: EditorialAssessmentRepository, useFactory: () => new EditorialAssessmentRepository() },
   {
     provide: ResearchPackageRepository,
     useFactory: () => new ResearchPackageRepository(),

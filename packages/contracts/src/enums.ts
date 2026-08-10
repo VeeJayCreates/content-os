@@ -71,3 +71,8 @@ export enum EditorialTimelinessPreference {
   BALANCED = "balanced",
   EVERGREEN = "evergreen",
 }
+
+export enum EditorialAssessmentStatus { PENDING = 'pending', READY = 'ready', FAILED = 'failed', STALE = 'stale' }
+export enum EditorialAssessmentBand { LOW = 'low', MEDIUM = 'medium', HIGH = 'high' }
+export enum EditorialAssessmentLongevity { BREAKING = 'breaking', TIMELY = 'timely', EVERGREEN = 'evergreen' }
+export enum EditorialAssessmentRecommendation { REJECT = 'reject', HOLD = 'hold', CONSIDER = 'consider', STRONG_CANDIDATE = 'strong_candidate' }

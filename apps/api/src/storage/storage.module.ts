@@ -9,6 +9,7 @@ import {
   SignalRepository,
   OpportunityRepository,
   OpportunityMetricRepository,
+  EditorialAssessmentRepository,
   ResearchPackageRepository,
   TopicSelectionRepository,
 } from '@content-os/storage';
@@ -23,6 +24,7 @@ import {
     SignalRepository,
     OpportunityRepository,
     OpportunityMetricRepository,
+    EditorialAssessmentRepository,
     ResearchPackageRepository,
     TopicSelectionRepository,
   ],

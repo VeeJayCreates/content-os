@@ -12,6 +12,7 @@ import type {
   TopicSelection,
   TopicSelectionEvaluationResult,
   ProjectSelectionPolicy,
+  EditorialAssessment,
   Signal,
   UpdateResearchSourceInput,
 } from "@content-os/contracts";
@@ -137,6 +138,8 @@ export function getResearchPackage(id: string) {
     `${apiEndpoint}/research-packages/${encodeURIComponent(id)}`,
   );
 }
+export function getEditorialAssessment(opportunityId: string) { return requestUrl<EditorialAssessment>(`${apiEndpoint}/opportunities/${encodeURIComponent(opportunityId)}/editorial-assessment`); }
+export function assessEditorialFit(opportunityId: string) { return requestUrl<EditorialAssessment>(`${apiEndpoint}/opportunities/${encodeURIComponent(opportunityId)}/editorial-assessment`, { method: "POST" }); }
 export function getTopicSelections(projectId?: string) { return requestUrl<TopicSelection[]>(`${apiEndpoint}/topic-selections${projectId ? `?projectId=${encodeURIComponent(projectId)}` : ""}`); }
 export function evaluateTopicSelections(projectId?: string) { return requestUrl<TopicSelectionEvaluationResult>(`${apiEndpoint}/topic-selections/evaluate`, { method: "POST", body: JSON.stringify(projectId ? { projectId } : {}) }); }
 export function getSelectionPolicy(projectId: string) { return requestUrl<ProjectSelectionPolicy>(`${apiEndpoint}/projects/${encodeURIComponent(projectId)}/selection-policy`); }
