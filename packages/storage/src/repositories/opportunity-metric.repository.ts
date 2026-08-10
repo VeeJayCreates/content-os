@@ -72,4 +72,14 @@ export class OpportunityMetricRepository {
     }
     return stored;
   }
+
+  async upsertMany(data: Omit<NewOpportunityMetric, 'id'>[]): Promise<void> {
+    if (data.length === 0) return;
+    db.transaction((tx) => {
+      for (const entry of data) {
+        const metric: NewOpportunityMetric = { id: randomUUID(), ...entry };
+        tx.insert(opportunityMetrics).values(metric).onConflictDoUpdate({ target: [opportunityMetrics.opportunityId, opportunityMetrics.scoreVersion], set: entry }).run();
+      }
+    });
+  }
 }

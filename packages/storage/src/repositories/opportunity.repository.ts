@@ -13,6 +13,17 @@ const opportunityColumns = getTableColumns(opportunities);
 export type OpportunityWithProject = typeof opportunities.$inferSelect & { projectName: string };
 export type OpportunitySignal = typeof signals.$inferSelect & { sourceName: string };
 
+// A single Opportunity insert binds fourteen values. Fifty stays below SQLite's
+// common 999-parameter limit while still avoiding one transaction per row.
+const DETECTION_BATCH_SIZE = 50;
+
+type OpportunityUpdate = {
+  id: string;
+  data: Partial<Omit<NewOpportunity, 'id' | 'projectId' | 'clusterKey' | 'createdAt' | 'updatedAt'>>;
+};
+
+type OpportunitySignalLink = { opportunityId: string; signalId: string };
+
 export class OpportunityRepository {
   async findAll(projectId?: string): Promise<OpportunityWithProject[]> {
     const query = db.select({ ...opportunityColumns, projectName: projects.name }).from(opportunities).innerJoin(projects, eq(opportunities.projectId, projects.id));
@@ -53,4 +64,30 @@ export class OpportunityRepository {
     const rows = await db.insert(opportunitySignals).values({ opportunityId, signalId, createdAt: new Date().toISOString() }).onConflictDoNothing().returning({ opportunityId: opportunitySignals.opportunityId });
     return rows.length > 0;
   }
+
+  async persistDetectionBatch(creates: NewOpportunity[], updates: OpportunityUpdate[], links: OpportunitySignalLink[]): Promise<number> {
+    let linksCreated = 0;
+    db.transaction((tx) => {
+      for (const batch of chunk(creates, DETECTION_BATCH_SIZE)) tx.insert(opportunities).values(batch).run();
+      for (const update of updates) tx.update(opportunities).set({ ...update.data, updatedAt: new Date().toISOString() }).where(eq(opportunities.id, update.id)).run();
+      for (const batch of chunk(links, DETECTION_BATCH_SIZE)) {
+        const inserted = tx.insert(opportunitySignals).values(batch.map((link) => ({ ...link, createdAt: new Date().toISOString() }))).onConflictDoNothing().returning({ signalId: opportunitySignals.signalId }).all();
+        linksCreated += inserted.length;
+      }
+    });
+    return linksCreated;
+  }
+
+  async updateAggregates(updates: OpportunityUpdate[]): Promise<void> {
+    if (updates.length === 0) return;
+    db.transaction((tx) => {
+      for (const update of updates) tx.update(opportunities).set({ ...update.data, updatedAt: new Date().toISOString() }).where(eq(opportunities.id, update.id)).run();
+    });
+  }
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const batches: T[][] = [];
+  for (let index = 0; index < items.length; index += size) batches.push(items.slice(index, index + size));
+  return batches;
 }
