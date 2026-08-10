@@ -18,6 +18,7 @@ const source = {
   projectId: 'project-1',
   name: 'ContentOS channel',
   sourceType: 'youtube',
+  role: 'verification',
   url: 'https://youtube.com/channel/UCabcdefghijklmnopqrstuv',
   enabled: true,
 };
@@ -91,5 +92,15 @@ describe('IngestionService YouTube flow', () => {
       BadRequestException,
     );
     expect(youtubeAdapter.fetchItems).not.toHaveBeenCalled();
+  });
+
+  it('does not change ingestion behavior based on source role', async () => {
+    signals.create.mockResolvedValue('created');
+    sources.findById.mockResolvedValue({ ...source, role: 'discovery' });
+
+    await expect(service.ingest(source.id)).resolves.toMatchObject({
+      createdCount: 1,
+    });
+    expect(youtubeAdapter.fetchItems).toHaveBeenCalledWith(source.url);
   });
 });

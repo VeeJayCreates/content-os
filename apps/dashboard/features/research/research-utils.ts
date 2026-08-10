@@ -1,4 +1,4 @@
-import { ResearchSourceType } from "@content-os/contracts";
+import { ResearchSourceRole, ResearchSourceType } from "@content-os/contracts";
 
 export function formatResearchSourceType(type: ResearchSourceType) {
   return type === ResearchSourceType.X
@@ -6,6 +6,13 @@ export function formatResearchSourceType(type: ResearchSourceType) {
     : type === ResearchSourceType.API
       ? "API"
       : type.charAt(0).toUpperCase() + type.slice(1);
+}
+export function formatResearchSourceRole(role: ResearchSourceRole) {
+  return role === ResearchSourceRole.DISCOVERY
+    ? "Discovery"
+    : role === ResearchSourceRole.VERIFICATION
+      ? "Verification"
+      : "Discovery + Verification";
 }
 export function formatResearchDate(value: string) {
   const date = new Date(value);

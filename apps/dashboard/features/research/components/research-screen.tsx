@@ -14,6 +14,7 @@ import {
 } from "@/features/research/api/client";
 import {
   formatResearchDate,
+  formatResearchSourceRole,
   formatResearchSourceType,
 } from "@/features/research/research-utils";
 import { getProjects } from "@/features/projects/api/client";
@@ -286,6 +287,9 @@ function SourceCard({
               {source.project.name} ·{" "}
               {formatResearchSourceType(source.sourceType)} · Updated{" "}
               {formatResearchDate(source.updatedAt)}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Source role: {formatResearchSourceRole(source.role)}
             </p>
             <a
               className="mt-2 inline-flex max-w-full items-center gap-1 truncate text-sm text-primary hover:underline"

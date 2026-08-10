@@ -5,6 +5,7 @@ export const researchSources = sqliteTable('research_sources', {
   projectId: text('project_id').notNull(),
   name: text('name').notNull(),
   sourceType: text('source_type').notNull(),
+  role: text('role').notNull().default('both'),
   url: text('url').notNull(),
   enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
   createdAt: text('created_at').notNull(),

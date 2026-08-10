@@ -8,7 +8,7 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
-import { ResearchSourceType } from '@content-os/contracts';
+import { ResearchSourceRole, ResearchSourceType } from '@content-os/contracts';
 
 export class CreateResearchSourceDto {
   @IsUUID()
@@ -21,6 +21,10 @@ export class CreateResearchSourceDto {
 
   @IsEnum(ResearchSourceType)
   sourceType!: ResearchSourceType;
+
+  @IsEnum(ResearchSourceRole)
+  @IsOptional()
+  role = ResearchSourceRole.BOTH;
 
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   @MaxLength(2048)

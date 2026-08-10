@@ -5,6 +5,7 @@ import {
   type CreateResearchSourceInput,
   type Project,
   type ResearchSource,
+  ResearchSourceRole,
   ResearchSourceType,
 } from "@content-os/contracts";
 import { Pencil, Plus } from "lucide-react";
@@ -13,7 +14,10 @@ import {
   ResearchApiError,
   updateResearchSource,
 } from "@/features/research/api/client";
-import { formatResearchSourceType } from "@/features/research/research-utils";
+import {
+  formatResearchSourceRole,
+  formatResearchSourceType,
+} from "@/features/research/research-utils";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -42,6 +46,9 @@ export function ResearchSourceFormDialog({
   const [error, setError] = React.useState<string | null>(null);
   const [sourceType, setSourceType] = React.useState<ResearchSourceType | "">(
     source?.sourceType ?? "",
+  );
+  const [role, setRole] = React.useState<ResearchSourceRole>(
+    source?.role ?? ResearchSourceRole.BOTH,
   );
   const editing = Boolean(source);
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -79,6 +86,7 @@ export function ResearchSourceFormDialog({
       projectId,
       name,
       sourceType: selectedSourceType,
+      role,
       url,
       enabled,
     };
@@ -188,6 +196,28 @@ export function ResearchSourceFormDialog({
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="grid gap-2 text-sm font-medium">
+              Source role
+              <select
+                name="role"
+                value={role}
+                onChange={(event) =>
+                  setRole(event.target.value as ResearchSourceRole)
+                }
+                disabled={busy}
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {Object.values(ResearchSourceRole).map((sourceRole) => (
+                  <option key={sourceRole} value={sourceRole}>
+                    {formatResearchSourceRole(sourceRole)}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs font-normal leading-5 text-muted-foreground">
+                Sets whether this source is intended for topic discovery,
+                factual verification, or both. It does not establish authority.
+              </span>
             </label>
             <label className="flex items-center gap-2 pt-7 text-sm font-medium">
               <input

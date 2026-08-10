@@ -34,6 +34,12 @@ export enum ResearchSourceType {
   API = "api",
 }
 
+export enum ResearchSourceRole {
+  DISCOVERY = "discovery",
+  VERIFICATION = "verification",
+  BOTH = "both",
+}
+
 export enum SignalIngestionStatus {
   CREATED = "created",
   DUPLICATE = "duplicate",

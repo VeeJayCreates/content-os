@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ResearchSourceType } from '@content-os/contracts';
+import { ResearchSourceRole, ResearchSourceType } from '@content-os/contracts';
 import type { ResearchSource } from '@content-os/contracts';
 import {
   ProjectRepository,
@@ -49,6 +49,7 @@ export class ResearchService {
       projectId: dto.projectId,
       name: dto.name.trim(),
       sourceType: dto.sourceType,
+      role: dto.role ?? ResearchSourceRole.BOTH,
       url,
       enabled: dto.enabled,
     });
@@ -82,8 +83,8 @@ export class ResearchService {
 
     const record = await this.researchSourceRepository.update(id, {
       ...dto,
-      name: dto.name?.trim(),
-      url: dto.url?.trim(),
+      ...(dto.name ? { name: dto.name.trim() } : {}),
+      ...(dto.url ? { url: dto.url.trim() } : {}),
     });
 
     return this.toResearchSource(record!);
@@ -140,6 +141,7 @@ export class ResearchService {
       projectId: record.projectId,
       name: record.name,
       sourceType: record.sourceType as ResearchSourceType,
+      role: record.role as ResearchSourceRole,
       url: record.url,
       enabled: record.enabled,
       createdAt: record.createdAt,
