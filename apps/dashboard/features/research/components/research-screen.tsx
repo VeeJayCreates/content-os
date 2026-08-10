@@ -101,15 +101,15 @@ export function ResearchScreen() {
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             Manage the trusted sources that will later feed autonomous research
-            and opportunity discovery.
+            and discovery of trending topics.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline">
-            <Link href="/research/signals">View signals</Link>
+            <Link href="/research/signals">View source content</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/research/opportunities">View opportunities</Link>
+            <Link href="/research/opportunities">View trending topics</Link>
           </Button>
           <ResearchSourceFormDialog
             projects={projects}
@@ -397,7 +397,7 @@ function SourceCard({
           <div className="rounded-md border border-emerald-400/20 bg-emerald-400/5 p-3 text-sm">
             <p className="font-medium text-emerald-200">Ingestion complete</p>
             <p className="mt-1 text-muted-foreground">
-              Fetched {ingestionResult.fetchedCount}, created {ingestionResult.createdCount}, duplicates {ingestionResult.duplicateCount}, skipped {ingestionResult.skippedCount}.
+              Found {ingestionResult.fetchedCount} source items, added {ingestionResult.createdCount}, already known {ingestionResult.duplicateCount}, skipped {ingestionResult.skippedCount}.
             </p>
             {ingestionResult.warnings.length > 0 ? (
               <ul className="mt-2 list-disc pl-5 text-amber-200">

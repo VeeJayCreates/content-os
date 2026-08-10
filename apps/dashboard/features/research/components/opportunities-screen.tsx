@@ -60,7 +60,7 @@ export function OpportunitiesScreen() {
         setError(
           reason instanceof ResearchApiError
             ? reason.message
-            : "Unable to load opportunities. Please try again.",
+            : "Unable to load trending topics. Please try again.",
         );
     } finally {
       if (mounted.current && requestId.current === id) setLoading(false);
@@ -103,7 +103,7 @@ export function OpportunitiesScreen() {
         setError(
           reason instanceof ResearchApiError
             ? reason.message
-            : "Unable to detect opportunities.",
+            : "Unable to find trending topics.",
         );
     } finally {
       if (mounted.current) setDetecting(false);
@@ -122,22 +122,22 @@ export function OpportunitiesScreen() {
             id="opportunities-title"
             className="text-2xl font-semibold tracking-tight sm:text-3xl"
           >
-            Opportunities
+            Trending Topics
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Ranked, deterministic clusters of supporting research signals.
+            Potentially relevant or emerging subjects detected from your source content.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Opportunity Score ranks the strength of each detected story.
+            Topic Strength reflects observable, deterministic signals from source content and emerging-topic activity.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline">
-            <Link href="/research/signals">View signals</Link>
+            <Link href="/research/signals">View source content</Link>
           </Button>
           <Button disabled={detecting} onClick={() => void detect()}>
             <Sparkles className="size-4" />
-            {detecting ? "Detecting…" : "Detect opportunities"}
+            {detecting ? "Finding trending topics…" : "Find trending topics"}
           </Button>
         </div>
       </div>
@@ -162,8 +162,8 @@ export function OpportunitiesScreen() {
       {result ? (
         <Card className="mb-5 border-emerald-400/20 bg-emerald-400/5">
           <CardContent className="pt-5 text-sm">
-            Processed {result.signalsProcessed} signals:{" "}
-            {result.opportunitiesCreated} created, {result.opportunitiesUpdated}{" "}
+            Processed {result.signalsProcessed} source items:{" "}
+            {result.opportunitiesCreated} trending topics found, {result.opportunitiesUpdated}{" "}
             updated, {result.linksCreated} links added.
           </CardContent>
         </Card>
@@ -172,7 +172,7 @@ export function OpportunitiesScreen() {
       {!loading && error ? (
         <Card className="border-red-400/20 bg-red-400/5">
           <CardHeader>
-            <CardTitle>We couldn’t load opportunities</CardTitle>
+            <CardTitle>We couldn’t load trending topics</CardTitle>
             <CardDescription>{error}</CardDescription>
           </CardHeader>
           <CardContent>
@@ -190,9 +190,9 @@ export function OpportunitiesScreen() {
         <Card className="border-dashed bg-card/40">
           <CardHeader className="items-center pt-10 text-center">
             <Search className="size-8 text-primary" />
-            <CardTitle className="mt-2">No opportunities found</CardTitle>
+            <CardTitle className="mt-2">No trending topics found</CardTitle>
             <CardDescription>
-              Detect opportunities after ingesting research signals.
+              Find trending topics after adding source content from your research sources.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -234,7 +234,7 @@ function OpportunityCard({
       setError(
         reason instanceof ResearchApiError
           ? reason.message
-          : "Unable to update opportunity.",
+          : "Unable to update the trending topic.",
       );
     } finally {
       setPending(false);
@@ -251,7 +251,7 @@ function OpportunityCard({
       setError(
         reason instanceof ResearchApiError
           ? reason.message
-          : "Unable to build the research package.",
+          : "Unable to build research.",
       );
     } finally {
       setBuildingResearch(false);
@@ -264,14 +264,14 @@ function OpportunityCard({
           <div>
             <CardTitle className="text-base">{item.title}</CardTitle>
             <CardDescription className="mt-1">
-              {item.project.name} · {item.signalCount} signals ·{" "}
+              {item.project.name} · {item.signalCount} source items ·{" "}
               {item.sourceCount} sources · Last seen{" "}
               {formatResearchDate(item.lastSeenAt)}
             </CardDescription>
           </div>
           <div className="flex gap-2">
             <Badge>{item.status}</Badge>
-            <Badge variant="success">Opportunity Score {item.score}</Badge>
+            <Badge variant="success">Topic Strength {item.score}</Badge>
           </div>
         </div>
       </CardHeader>

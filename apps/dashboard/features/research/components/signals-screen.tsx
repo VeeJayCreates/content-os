@@ -63,7 +63,7 @@ export function SignalsScreen() {
         setError(
           requestError instanceof ResearchApiError
             ? requestError.message
-            : "Unable to load signals. Please try again.",
+            : "Unable to load source content. Please try again.",
         );
       }
     } finally {
@@ -116,7 +116,7 @@ export function SignalsScreen() {
             id="signals-title"
             className="text-2xl font-semibold tracking-tight sm:text-3xl"
           >
-            Signals
+            Source Content
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             Stored items discovered from your enabled research sources.
@@ -165,7 +165,7 @@ export function SignalsScreen() {
       {!isLoading && error ? (
         <Card className="border-red-400/20 bg-red-400/5">
           <CardHeader>
-            <CardTitle>We couldn’t load signals</CardTitle>
+            <CardTitle>We couldn’t load source content</CardTitle>
             <CardDescription>{error}</CardDescription>
           </CardHeader>
           <CardContent>
@@ -181,9 +181,9 @@ export function SignalsScreen() {
         <Card className="border-dashed bg-card/40">
           <CardHeader className="items-center pt-10 text-center">
             <Search className="size-8 text-primary" />
-            <CardTitle className="mt-2">No signals found</CardTitle>
+            <CardTitle className="mt-2">No source content found</CardTitle>
             <CardDescription>
-              Ingest an enabled research source to store signals here.
+              Ingest an enabled research source to add source content here.
             </CardDescription>
           </CardHeader>
           <CardContent className="pb-10 text-center">

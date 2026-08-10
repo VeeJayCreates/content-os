@@ -44,7 +44,7 @@ export function ResearchPackageScreen({ packageId }: { packageId: string }) {
         setError(
           reason instanceof ResearchApiError
             ? reason.message
-            : "Unable to load the research package.",
+            : "Unable to load the research.",
         );
     } finally {
       if (mounted.current && requestId.current === id) setLoading(false);
@@ -69,7 +69,7 @@ export function ResearchPackageScreen({ packageId }: { packageId: string }) {
     return (
       <Card className="border-red-400/20 bg-red-400/5">
         <CardHeader>
-          <CardTitle>We couldn’t load this research package</CardTitle>
+          <CardTitle>We couldn’t load this research</CardTitle>
           <CardDescription>{error}</CardDescription>
         </CardHeader>
         <CardContent>
@@ -90,11 +90,11 @@ export function ResearchPackageScreen({ packageId }: { packageId: string }) {
         href="/research/opportunities"
         className="text-sm text-primary hover:underline"
       >
-        ← Opportunities
+        ← Trending Topics
       </Link>
       <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-primary">Research package</p>
+          <p className="text-sm font-medium text-primary">Research</p>
           <h1
             id="research-package-title"
             className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl"
@@ -116,7 +116,7 @@ export function ResearchPackageScreen({ packageId }: { packageId: string }) {
         </div>
       </div>
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
-        <Metric label="Signals" value={researchPackage.signalCount} />
+        <Metric label="Source items" value={researchPackage.signalCount} />
         <Metric
           label="Independent sources"
           value={researchPackage.sourceCount}
@@ -156,9 +156,9 @@ export function ResearchPackageScreen({ packageId }: { packageId: string }) {
       </Card>
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle>Supporting signals</CardTitle>
+          <CardTitle>Supporting source content</CardTitle>
           <CardDescription>
-            {researchPackage.project.name} · Opportunity:{" "}
+            {researchPackage.project.name} · Trending Topic:{" "}
             {researchPackage.opportunityTitle}
           </CardDescription>
         </CardHeader>

@@ -100,7 +100,7 @@ export function SelectionsScreen() {
       setError(
         e instanceof ResearchApiError
           ? e.message
-          : "Unable to evaluate topics.",
+          : "Unable to evaluate final selection.",
       );
     } finally {
       setPending(false);
@@ -116,10 +116,11 @@ export function SelectionsScreen() {
   }
   return (
     <section className="mx-auto max-w-6xl">
-      <h1 className="text-3xl font-semibold">Topic selections</h1>
+      <h1 className="text-3xl font-semibold">Final selection</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Selection Score measures policy fit; Opportunity Score measures story
-        strength; Research Confidence measures evidence support.
+        Selection Score measures final ranking; Topic Strength measures
+        observable source-content and emerging-topic strength; Research Confidence measures
+        evidence support.
       </p>
       <div className="mt-5 flex gap-2">
         <select
@@ -135,21 +136,21 @@ export function SelectionsScreen() {
           ))}
         </select>
         <Button disabled={pending} onClick={() => void evaluate()}>
-          {pending ? "Evaluating…" : "Evaluate topics"}
+          {pending ? "Evaluating…" : "Evaluate selection"}
         </Button>
       </div>
       {policy ? (
         <Card className="mt-4">
           <CardHeader>
-            <CardTitle>Selection policy</CardTitle>
+            <CardTitle>Final selection policy</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
-            <PolicyNumber label="Minimum Opportunity Score" value={policy.minimumOpportunityScore} min={0} max={100} onChange={(value) => setPolicy({ ...policy, minimumOpportunityScore: value })} />
+            <PolicyNumber label="Minimum Topic Strength" value={policy.minimumOpportunityScore} min={0} max={100} onChange={(value) => setPolicy({ ...policy, minimumOpportunityScore: value })} />
             <PolicyNumber label="Minimum Research Confidence" value={policy.minimumResearchConfidence} min={0} max={100} onChange={(value) => setPolicy({ ...policy, minimumResearchConfidence: value })} />
             <PolicyNumber label="Minimum Independent Sources" value={policy.minimumIndependentSources} min={1} onChange={(value) => setPolicy({ ...policy, minimumIndependentSources: value })} />
             <PolicyNumber label="Max Selected Per Run" value={policy.maxSelectedPerRun} min={1} onChange={(value) => setPolicy({ ...policy, maxSelectedPerRun: value })} />
-            <label className="flex items-center gap-2"><input type="checkbox" checked={policy.requireResearchPackage} onChange={(event) => setPolicy({ ...policy, requireResearchPackage: event.target.checked })} />Require Research Package</label>
-            <label className="flex items-center gap-2"><input type="checkbox" checked={policy.allowSingleSourceBreakingStories} onChange={(event) => setPolicy({ ...policy, allowSingleSourceBreakingStories: event.target.checked })} />Allow Single-Source Breaking Stories</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={policy.requireResearchPackage} onChange={(event) => setPolicy({ ...policy, requireResearchPackage: event.target.checked })} />Require Research</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={policy.allowSingleSourceBreakingStories} onChange={(event) => setPolicy({ ...policy, allowSingleSourceBreakingStories: event.target.checked })} />Allow breaking topics from one source</label>
             <div className="sm:col-span-2 flex items-center gap-3"><Button type="button" disabled={savingPolicy} onClick={() => void savePolicy()}>{savingPolicy ? "Saving…" : "Save policy"}</Button>{policyMessage ? <p role="status" className="text-muted-foreground">{policyMessage}</p> : null}</div>
           </CardContent>
         </Card>
@@ -172,7 +173,7 @@ export function SelectionsScreen() {
           </CardContent>
         </Card>
       ) : !items.length ? (
-        <p className="mt-6 text-muted-foreground">No evaluated topics yet.</p>
+        <p className="mt-6 text-muted-foreground">No evaluated trending topics yet.</p>
       ) : (
         <div className="mt-6 grid gap-3">
           {items.map((item) => (
@@ -205,7 +206,7 @@ export function SelectionsScreen() {
                 </div>
               </CardHeader>
               <CardContent className="text-sm">
-                Selection Score {item.selectionScore} · Opportunity Score{" "}
+                Selection Score {item.selectionScore} · Topic Strength{" "}
                 {item.opportunity.score} · Research Confidence{" "}
                 {item.researchPackage?.confidenceScore ?? "Unavailable"} ·
                 Sources {item.researchPackage?.sourceCount ?? "Unavailable"}
@@ -215,7 +216,7 @@ export function SelectionsScreen() {
                     className="mt-2 inline-block text-primary hover:underline"
                     href={`/research/packages/${item.researchPackage.id}`}
                   >
-                    Open research package
+                    Open research
                   </Link>
                 ) : null}
               </CardContent>

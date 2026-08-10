@@ -132,8 +132,7 @@ export function ResearchSourceFormDialog({
             {editing ? "Edit research source" : "Add research source"}
           </DialogTitle>
           <DialogDescription>
-            Sources will later feed autonomous research and opportunity
-            discovery.
+            Sources will later feed autonomous research and discovery of trending topics.
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={submit}>
