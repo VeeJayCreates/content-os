@@ -4,6 +4,7 @@ jest.mock('@content-os/contracts', () => ({
   EditorialAssessmentBand: { LOW: 'low', MEDIUM: 'medium', HIGH: 'high' },
   EditorialAssessmentLongevity: { BREAKING: 'breaking', TIMELY: 'timely', EVERGREEN: 'evergreen' },
   EditorialAssessmentRecommendation: { REJECT: 'reject', HOLD: 'hold', CONSIDER: 'consider', STRONG_CANDIDATE: 'strong_candidate' },
+  ContentAngleType: { BREAKING: 'breaking', EXPLAINER: 'explainer', FACT_CHECK: 'fact_check', ANALYSIS: 'analysis', UPDATE: 'update' },
 }));
 jest.mock('@content-os/storage', () => ({
   OpportunityRepository: class OpportunityRepository {},
@@ -21,7 +22,7 @@ const opportunity = { id: 'opportunity-1', projectId: 'project-1', title: 'Story
 const profile = { projectId: 'project-1', mission: '', targetAudience: '', primaryLanguage: '', primaryGeography: '', topicThemes: [], excludedTopics: [], contentGoals: [], preferredFormats: [], timelinessPreference: 'balanced', revision: 1, createdAt: 'x', updatedAt: 'x' };
 const metric = { opportunityId: 'opportunity-1', scoreVersion: 'opportunity-metrics-v2', opportunityScore: 30, freshnessScore: 30, supportScore: 0, sourceDiversityScore: 0, confirmationScore: 0, momentumScore: 0, persistenceScore: 0, signalCount: 1, independentSourceCount: 1, sourceTypeCount: 1, firstSeenAt: 'x', lastSeenAt: 'x', calculatedAt: 'x', inputHash: 'metric' };
 const researchPackage = { id: 'package-1', status: 'ready', updatedAt: 'x', summary: 'summary', confidenceScore: 60, sourceCount: 1, signalCount: 1 };
-const evaluation = { relevance: 'high', newsworthiness: 'high', contentPotential: 'high', longevity: 'evergreen', duplicationRisk: 'low', recommendation: 'strong_candidate', rationale: 'Clear project fit.', citedFactIds: ['fact-1'], citedSignalIds: ['signal-1'] };
+const evaluation = { relevance: 'high', newsworthiness: 'high', contentPotential: 'high', longevity: 'evergreen', duplicationRisk: 'low', recommendation: 'strong_candidate', angleType: 'explainer', videoIdeaTitle: 'What the evidence means', videoIdeaSummary: 'A concise evidence-led video idea.', hook: 'Here is what the evidence actually shows.', whyNow: 'The topic is timely for this project.', rationale: 'Clear project fit.', citedFactIds: ['fact-1'], citedSignalIds: ['signal-1'] };
 
 describe('EditorialAssessmentService', () => {
   const opportunities = { findById: jest.fn() };
@@ -76,11 +77,11 @@ describe('EditorialAssessmentService', () => {
   it('changes the deterministic cache key for the new prompt version while retaining same-version reuse', async () => {
     const sharedInput = { project: 'project-1', opportunity: 'opportunity-1', evidence: ['fact-1'] };
     const v1Hash = editorialAssessmentInputHash({ ...sharedInput, promptVersion: 'editorial-assessment-v1' });
-    const v11Hash = editorialAssessmentInputHash({ ...sharedInput, promptVersion: 'editorial-assessment-v1.1' });
-    expect(v11Hash).not.toBe(v1Hash);
+    const contentAngleHash = editorialAssessmentInputHash({ ...sharedInput, promptVersion: 'content-angle-v1' });
+    expect(contentAngleHash).not.toBe(v1Hash);
 
     const first = await service.assess('opportunity-1');
-    expect(first.promptVersion).toBe('editorial-assessment-v1.1');
+    expect(first.promptVersion).toBe('content-angle-v1');
     const second = await service.assess('opportunity-1');
     expect(second).toEqual(first);
     expect(evaluator.assess).toHaveBeenCalledTimes(1);
@@ -129,6 +130,13 @@ describe('EditorialAssessmentService', () => {
   it.each([
     ['an invalid recommendation', { ...evaluation, recommendation: 'unsupported' }, 'invalid_recommendation', 'recommendation'],
     ['an invalid longevity value', { ...evaluation, longevity: 'low' }, 'invalid_longevity', 'longevity'],
+    ['an invalid angle type', { ...evaluation, angleType: 'viral' }, 'invalid_angle_type', 'angleType'],
+    ['a missing video idea title', { ...evaluation, videoIdeaTitle: '' }, 'missing_video_idea_title', 'videoIdeaTitle'],
+    ['an oversized video idea title', { ...evaluation, videoIdeaTitle: 'x'.repeat(141) }, 'video_idea_title_too_long', 'videoIdeaTitle'],
+    ['a missing video idea summary', { ...evaluation, videoIdeaSummary: '' }, 'missing_video_idea_summary', 'videoIdeaSummary'],
+    ['an oversized video idea summary', { ...evaluation, videoIdeaSummary: 'x'.repeat(601) }, 'video_idea_summary_too_long', 'videoIdeaSummary'],
+    ['an oversized hook', { ...evaluation, hook: 'x'.repeat(241) }, 'hook_too_long', 'hook'],
+    ['an oversized why now', { ...evaluation, whyNow: 'x'.repeat(361) }, 'why_now_too_long', 'whyNow'],
     ['an invented fact citation', { ...evaluation, citedFactIds: ['invented-fact'] }, 'unknown_fact_citation', 'citedFactIds'],
     ['an invented signal citation', { ...evaluation, citedSignalIds: ['invented-signal'] }, 'unknown_signal_citation', 'citedSignalIds'],
     ['an oversized rationale', { ...evaluation, rationale: 'x'.repeat(501) }, 'rationale_too_long', 'rationale'],
@@ -159,6 +167,23 @@ describe('EditorialAssessmentService', () => {
     assessments.upsert.mockRejectedValue(new Error('sqlite write failed'));
     await expect(service.assess('opportunity-1')).rejects.toMatchObject({
       message: 'Unable to persist editorial assessment',
+    });
+  });
+
+  it('treats a ready assessment without the Content Angle fields as stale', async () => {
+    await service.assess('opportunity-1');
+    stored = { ...stored, angleType: null, videoIdeaTitle: null, videoIdeaSummary: null, hook: null, whyNow: null };
+
+    await expect(service.findOne('opportunity-1')).resolves.toMatchObject({ status: 'stale' });
+    expect(evaluator.assess).toHaveBeenCalledTimes(1);
+    expect(assessments.upsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps Idea Score server-derived instead of trusting a provider score', async () => {
+    evaluator.assess.mockResolvedValueOnce({ ...evaluation, editorialScore: 0 });
+
+    await expect(service.assess('opportunity-1')).resolves.toMatchObject({
+      editorialScore: 100,
     });
   });
 });

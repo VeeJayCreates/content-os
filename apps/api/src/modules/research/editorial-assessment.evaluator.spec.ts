@@ -45,7 +45,7 @@ describe('OpenAiEditorialAssessmentEvaluator', () => {
     expect(log).not.toContain('not logged');
   });
 
-  it('sends an explicit JSON output contract with the distinct longevity and recommendation enums', async () => {
+  it('sends an explicit JSON output contract with distinct angle, longevity, and recommendation enums', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -61,6 +61,11 @@ describe('OpenAiEditorialAssessmentEvaluator', () => {
     expect(prompt).toContain('Do not use low/medium/high for longevity.');
     expect(prompt).not.toContain('"longevity": "low | medium | high"');
     expect(prompt).toContain('recommendation: reject, hold, consider, strong_candidate');
+    expect(prompt).toContain('angleType: breaking, explainer, fact_check, analysis, update');
+    expect(prompt).toContain('"videoIdeaTitle": "concise working title"');
+    expect(prompt).toContain('"videoIdeaSummary": "1-3 concise sentences"');
+    expect(prompt).toContain('"hook": "short opening premise"');
+    expect(prompt).toContain('"whyNow": "why this angle matters now"');
     expect(info).not.toHaveBeenCalled();
   });
 

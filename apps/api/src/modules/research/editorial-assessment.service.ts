@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
 import { ConflictException, Inject, Injectable, InternalServerErrorException, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
-import { EditorialAssessment, EditorialAssessmentBand, EditorialAssessmentLongevity, EditorialAssessmentRecommendation, EditorialAssessmentStatus, OPPORTUNITY_METRICS_V2_VERSION } from '@content-os/contracts';
+import { ContentAngleType, EditorialAssessment, EditorialAssessmentBand, EditorialAssessmentLongevity, EditorialAssessmentRecommendation, EditorialAssessmentStatus, OPPORTUNITY_METRICS_V2_VERSION } from '@content-os/contracts';
 import { EditorialAssessmentRepository, OpportunityMetricRepository, OpportunityRepository, ProjectEditorialProfileRepository, ResearchPackageRepository } from '@content-os/storage';
 import { EDITORIAL_ASSESSMENT_EVALUATOR, EDITORIAL_ASSESSMENT_PROMPT_VERSION, EditorialEvaluatorNotConfiguredError, EditorialEvaluatorProviderError } from './editorial-assessment.evaluator';
 import type { EditorialAssessmentEvaluator } from './editorial-assessment.evaluator';
 
-type Output = { relevance: EditorialAssessmentBand; newsworthiness: EditorialAssessmentBand; contentPotential: EditorialAssessmentBand; longevity: EditorialAssessmentLongevity; duplicationRisk: EditorialAssessmentBand; recommendation: EditorialAssessmentRecommendation; rationale: string; citedFactIds: string[]; citedSignalIds: string[] };
-type OutputValidationReason = 'invalid_json_shape' | 'missing_required_field' | 'invalid_relevance' | 'invalid_newsworthiness' | 'invalid_content_potential' | 'invalid_longevity' | 'invalid_duplication_risk' | 'invalid_recommendation' | 'rationale_too_long' | 'unknown_fact_citation' | 'unknown_signal_citation';
+type Output = { relevance: EditorialAssessmentBand; newsworthiness: EditorialAssessmentBand; contentPotential: EditorialAssessmentBand; longevity: EditorialAssessmentLongevity; duplicationRisk: EditorialAssessmentBand; recommendation: EditorialAssessmentRecommendation; rationale: string; citedFactIds: string[]; citedSignalIds: string[]; angleType: ContentAngleType; videoIdeaTitle: string; videoIdeaSummary: string; hook: string; whyNow: string };
+type OutputValidationReason = 'invalid_json_shape' | 'missing_required_field' | 'invalid_relevance' | 'invalid_newsworthiness' | 'invalid_content_potential' | 'invalid_longevity' | 'invalid_duplication_risk' | 'invalid_recommendation' | 'invalid_angle_type' | 'rationale_too_long' | 'unknown_fact_citation' | 'unknown_signal_citation' | 'missing_video_idea_title' | 'video_idea_title_too_long' | 'missing_video_idea_summary' | 'video_idea_summary_too_long' | 'hook_too_long' | 'why_now_too_long';
 class EditorialAssessmentOutputValidationError extends Error {}
 
 @Injectable()
@@ -32,7 +32,7 @@ export class EditorialAssessmentService {
       this.metrics.findByOpportunityId(opportunityId, OPPORTUNITY_METRICS_V2_VERSION),
       this.packages.findByOpportunityId(opportunityId),
     ]);
-    if (!metric || !researchPackage || researchPackage.status !== 'ready') return this.toContract({ ...assessment, status: EditorialAssessmentStatus.STALE });
+    if (!metric || !researchPackage || researchPackage.status !== 'ready' || !assessment.angleType || !assessment.videoIdeaTitle || !assessment.videoIdeaSummary || !assessment.hook || !assessment.whyNow) return this.toContract({ ...assessment, status: EditorialAssessmentStatus.STALE });
     const input = await this.inputFor(opportunity, profile, metric, researchPackage);
     const hash = this.hash(input);
     return this.toContract(hash === assessment.inputHash ? assessment : { ...assessment, status: EditorialAssessmentStatus.STALE });
@@ -51,7 +51,7 @@ export class EditorialAssessmentService {
     const input = await this.inputFor(opportunity, profile, metric, researchPackage);
     const inputHash = this.hash(input);
     const cached = await this.assessments.find(opportunity.projectId, opportunityId);
-    if (cached?.status === EditorialAssessmentStatus.READY && cached.inputHash === inputHash) return this.toContract(cached);
+    if (cached?.status === EditorialAssessmentStatus.READY && cached.inputHash === inputHash && cached.angleType && cached.videoIdeaTitle && cached.videoIdeaSummary && cached.hook && cached.whyNow) return this.toContract(cached);
     const base = { projectId: opportunity.projectId, opportunityId, projectEditorialProfileRevision: profile.revision, opportunityMetricsVersion: metric.scoreVersion, researchPackageId: researchPackage.id, researchPackageUpdatedAt: researchPackage.updatedAt, promptVersion: EDITORIAL_ASSESSMENT_PROMPT_VERSION, inputHash };
     try {
       const facts = input.researchPackage.facts;
@@ -62,7 +62,7 @@ export class EditorialAssessmentService {
       this.logger.warn(JSON.stringify({ stage: 'editorial_assessment.service_catch', opportunityId, category: this.errorCategory(error) }));
       const configured = !(error instanceof EditorialEvaluatorNotConfiguredError);
       try {
-        await this.assessments.upsert({ ...base, status: EditorialAssessmentStatus.FAILED, relevance: null, newsworthiness: null, contentPotential: null, longevity: null, duplicationRisk: null, recommendation: null, editorialScore: null, rationale: null, citedFactIds: [], citedSignalIds: [], evaluatorProvider: this.evaluator.provider, evaluatorModel: this.evaluator.model, errorCode: configured ? 'provider_failure' : 'not_configured', failureReason: configured ? 'Editorial evaluator request failed' : 'Editorial evaluator is not configured', assessedAt: null });
+        await this.assessments.upsert({ ...base, status: EditorialAssessmentStatus.FAILED, relevance: null, newsworthiness: null, contentPotential: null, longevity: null, duplicationRisk: null, recommendation: null, editorialScore: null, rationale: null, citedFactIds: [], citedSignalIds: [], angleType: null, videoIdeaTitle: null, videoIdeaSummary: null, hook: null, whyNow: null, evaluatorProvider: this.evaluator.provider, evaluatorModel: this.evaluator.model, errorCode: configured ? 'provider_failure' : 'not_configured', failureReason: configured ? 'Editorial evaluator request failed' : 'Editorial evaluator is not configured', assessedAt: null });
       } catch {
         throw new InternalServerErrorException('Unable to persist editorial assessment');
       }
@@ -105,13 +105,26 @@ export class EditorialAssessmentService {
     if (!duplicationRisk) this.outputValidationFailure(opportunityId, get('duplicationRisk') === undefined ? 'missing_required_field' : 'invalid_duplication_risk', 'duplicationRisk', get('duplicationRisk'));
     const recommendation = Object.values(EditorialAssessmentRecommendation).includes(get('recommendation') as EditorialAssessmentRecommendation) ? get('recommendation') as EditorialAssessmentRecommendation : undefined;
     if (!recommendation) this.outputValidationFailure(opportunityId, get('recommendation') === undefined ? 'missing_required_field' : 'invalid_recommendation', 'recommendation', get('recommendation'));
+    const angleType = Object.values(ContentAngleType).includes(get('angleType') as ContentAngleType) ? get('angleType') as ContentAngleType : undefined;
+    if (!angleType) this.outputValidationFailure(opportunityId, get('angleType') === undefined ? 'missing_required_field' : 'invalid_angle_type', 'angleType', get('angleType'));
+    const videoIdeaTitle = this.requiredText(get('videoIdeaTitle'), opportunityId, 'videoIdeaTitle', 'missing_video_idea_title', 'video_idea_title_too_long', 140);
+    const videoIdeaSummary = this.requiredText(get('videoIdeaSummary'), opportunityId, 'videoIdeaSummary', 'missing_video_idea_summary', 'video_idea_summary_too_long', 600);
+    const hook = this.requiredText(get('hook'), opportunityId, 'hook', 'missing_required_field', 'hook_too_long', 240);
+    const whyNow = this.requiredText(get('whyNow'), opportunityId, 'whyNow', 'missing_required_field', 'why_now_too_long', 360);
     const rawRationale = get('rationale');
     if (typeof rawRationale !== 'string' || !rawRationale.trim()) this.outputValidationFailure(opportunityId, 'missing_required_field', 'rationale');
     const rationale = rawRationale.trim();
     if (rationale.length > 500) this.outputValidationFailure(opportunityId, 'rationale_too_long', 'rationale', String(rationale.length));
     const citedFactIds = this.citations(get('citedFactIds'), facts, opportunityId, 'citedFactIds', 'unknown_fact_citation');
     const citedSignalIds = this.citations(get('citedSignalIds'), signals, opportunityId, 'citedSignalIds', 'unknown_signal_citation');
-    return { relevance, newsworthiness, contentPotential, longevity, duplicationRisk, recommendation, rationale, citedFactIds, citedSignalIds };
+    return { relevance, newsworthiness, contentPotential, longevity, duplicationRisk, recommendation, rationale, citedFactIds, citedSignalIds, angleType, videoIdeaTitle, videoIdeaSummary, hook, whyNow };
+  }
+
+  private requiredText(value: unknown, opportunityId: string, field: string, missingReason: OutputValidationReason, tooLongReason: OutputValidationReason, maxLength: number): string {
+    if (typeof value !== 'string' || !value.trim()) this.outputValidationFailure(opportunityId, missingReason, field);
+    const text = value.trim();
+    if (text.length > maxLength) this.outputValidationFailure(opportunityId, tooLongReason, field, String(text.length));
+    return text;
   }
 
   private citations(value: unknown, allowed: Set<string>, opportunityId: string, field: 'citedFactIds' | 'citedSignalIds', unknownReason: 'unknown_fact_citation' | 'unknown_signal_citation') {
@@ -133,7 +146,7 @@ export class EditorialAssessmentService {
   }
 }
 
-function score(output: Output) {
+function score(output: Output): number {
   const band: { [key: string]: number } = { low: 5, medium: 15, high: 25 };
   return Math.min(100, band[output.relevance] + band[output.newsworthiness] + band[output.contentPotential] + ({ breaking: 10, timely: 12, evergreen: 15 }[output.longevity] ?? 0) + ({ low: 10, medium: 5, high: 0 }[output.duplicationRisk] ?? 0));
 }

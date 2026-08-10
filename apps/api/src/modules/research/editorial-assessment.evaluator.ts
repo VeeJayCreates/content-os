@@ -1,15 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
 
 export const EDITORIAL_ASSESSMENT_EVALUATOR = Symbol('EDITORIAL_ASSESSMENT_EVALUATOR');
-export const EDITORIAL_ASSESSMENT_PROMPT_VERSION = 'editorial-assessment-v1.1';
+export const EDITORIAL_ASSESSMENT_PROMPT_VERSION = 'content-angle-v1';
 export const EDITORIAL_ASSESSMENT_TIMEOUT_MS = 60_000;
-export const EDITORIAL_ASSESSMENT_SYSTEM_PROMPT = `You assess editorial suitability, not factual truth. Use only supplied structured context. Do not invent facts or citations. Research Confidence is fixed.
+export const EDITORIAL_ASSESSMENT_SYSTEM_PROMPT = `You create one defensible video idea and assess its editorial suitability. You assess editorial suitability, not factual truth. A misleading or unverified claim can still warrant a fact_check, explainer, analysis, or update angle; do not amplify unsupported claims as fact. Use only supplied structured context. Do not invent facts or citations. Research Confidence is fixed.
 
 Return JSON only. Use this exact shape:
 {
   "relevance": "low | medium | high",
   "newsworthiness": "low | medium | high",
   "contentPotential": "low | medium | high",
+  "angleType": "breaking | explainer | fact_check | analysis | update",
+  "videoIdeaTitle": "concise working title",
+  "videoIdeaSummary": "1-3 concise sentences",
+  "hook": "short opening premise",
+  "whyNow": "why this angle matters now",
   "longevity": "breaking | timely | evergreen",
   "duplicationRisk": "low | medium | high",
   "recommendation": "reject | hold | consider | strong_candidate",
@@ -22,6 +27,7 @@ Allowed values:
 - relevance: low, medium, high
 - newsworthiness: low, medium, high
 - contentPotential: low, medium, high
+- angleType: breaking, explainer, fact_check, analysis, update
 - longevity: breaking, timely, evergreen
 - duplicationRisk: low, medium, high
 - recommendation: reject, hold, consider, strong_candidate

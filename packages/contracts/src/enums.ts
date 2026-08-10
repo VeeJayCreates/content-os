@@ -76,3 +76,4 @@ export enum EditorialAssessmentStatus { PENDING = 'pending', READY = 'ready', FA
 export enum EditorialAssessmentBand { LOW = 'low', MEDIUM = 'medium', HIGH = 'high' }
 export enum EditorialAssessmentLongevity { BREAKING = 'breaking', TIMELY = 'timely', EVERGREEN = 'evergreen' }
 export enum EditorialAssessmentRecommendation { REJECT = 'reject', HOLD = 'hold', CONSIDER = 'consider', STRONG_CANDIDATE = 'strong_candidate' }
+export enum ContentAngleType { BREAKING = 'breaking', EXPLAINER = 'explainer', FACT_CHECK = 'fact_check', ANALYSIS = 'analysis', UPDATE = 'update' }
