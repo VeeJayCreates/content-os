@@ -19,6 +19,7 @@ import {
 } from "@/features/research/research-utils";
 import { getProjects } from "@/features/projects/api/client";
 import { ResearchSourceFormDialog } from "@/features/research/components/research-source-form-dialog";
+import { BulkResearchSourceDialog } from "@/features/research/components/bulk-research-source-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -113,6 +114,11 @@ export function ResearchScreen() {
             <Link href="/research/opportunities">View trending topics</Link>
           </Button>
           <ResearchSourceFormDialog
+            projects={projects}
+            defaultProjectId={projectId}
+            onCompleted={() => void load()}
+          />
+          <BulkResearchSourceDialog
             projects={projects}
             defaultProjectId={projectId}
             onCompleted={() => void load()}

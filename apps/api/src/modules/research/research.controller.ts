@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 
 import { CreateResearchSourceDto } from './dto/create-research-source.dto';
+import { BulkCreateResearchSourcesDto } from './dto/bulk-create-research-sources.dto';
 import { ListResearchSourcesDto } from './dto/list-research-sources.dto';
 import { UpdateResearchSourceDto } from './dto/update-research-source.dto';
 import { IngestionService } from './ingestion.service';
@@ -36,6 +37,11 @@ export class ResearchController {
   @Post(':id/ingest')
   ingest(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.ingestionService.ingest(id);
+  }
+
+  @Post('bulk')
+  bulkCreate(@Body() dto: BulkCreateResearchSourcesDto) {
+    return this.researchService.bulkCreate(dto);
   }
 
   @Post()

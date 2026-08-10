@@ -33,3 +33,33 @@ export interface UpdateResearchSourceInput {
   url?: string;
   enabled?: boolean;
 }
+
+export interface BulkResearchSourceInput {
+  url: string;
+  role?: ResearchSourceRole;
+}
+
+export interface BulkCreateResearchSourcesInput {
+  projectId: string;
+  sourceType: ResearchSourceType;
+  defaultRole: ResearchSourceRole;
+  sources: BulkResearchSourceInput[];
+}
+
+export type BulkResearchSourceStatus = "added" | "existing" | "failed";
+
+export interface BulkResearchSourceResult {
+  inputUrl: string;
+  status: BulkResearchSourceStatus;
+  source?: ResearchSource;
+  errorCode?: "invalid_url" | "invalid_role" | "duplicate_in_batch" | "unresolved_youtube_channel" | "create_failed";
+  message?: string;
+}
+
+export interface BulkCreateResearchSourcesResult {
+  total: number;
+  added: number;
+  existing: number;
+  failed: number;
+  results: BulkResearchSourceResult[];
+}

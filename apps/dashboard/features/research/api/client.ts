@@ -2,6 +2,8 @@
 
 import type {
   CreateResearchSourceInput,
+  BulkCreateResearchSourcesInput,
+  BulkCreateResearchSourcesResult,
   IngestionResult,
   Opportunity,
   OpportunityDetectionResult,
@@ -64,6 +66,12 @@ export function getResearchSources(projectId?: string) {
 }
 export function createResearchSource(input: CreateResearchSourceInput) {
   return request<ResearchSource>("", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+export function bulkCreateResearchSources(input: BulkCreateResearchSourcesInput) {
+  return request<BulkCreateResearchSourcesResult>("/bulk", {
     method: "POST",
     body: JSON.stringify(input),
   });
