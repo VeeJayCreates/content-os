@@ -6,6 +6,7 @@ export type AiRoute = {
   model: string | null;
   capability: AiCapability;
   timeoutMs: number;
+  costMode: 'configured' | 'zero';
   fallback: null;
 };
 
@@ -26,10 +27,45 @@ export type AiStructuredGenerationRequest = {
 export type AiProviderRequest = AiStructuredGenerationRequest & { route: AiRoute };
 export type AiProviderResponse = { output: unknown; usage: AiUsage };
 
-export interface AiProvider {
+export type AiEmbeddingRequest = {
+  task: AiTask;
+  projectId: string | null;
+  texts: readonly string[];
+};
+
+export type AiEmbeddingResponse = {
+  embeddings: number[][];
+  dimensions: number;
+  usage: AiUsage;
+};
+
+export type AiRerankingRequest = {
+  task: AiTask;
+  projectId: string | null;
+  query: string;
+  documents: readonly string[];
+};
+
+export type AiRerankingResult = { index: number; relevanceScore: number };
+export type AiRerankingResponse = { results: AiRerankingResult[]; usage: AiUsage };
+
+export interface AiProviderBase {
   readonly name: string;
+}
+
+export interface AiStructuredGenerationProvider extends AiProviderBase {
   structuredGeneration(request: AiProviderRequest): Promise<AiProviderResponse>;
 }
+
+export interface AiEmbeddingProvider extends AiProviderBase {
+  embed(request: AiEmbeddingRequest & { route: AiRoute }): Promise<AiEmbeddingResponse>;
+}
+
+export interface AiRerankingProvider extends AiProviderBase {
+  rerank(request: AiRerankingRequest & { route: AiRoute }): Promise<AiRerankingResponse>;
+}
+
+export type AiProvider = AiStructuredGenerationProvider | AiEmbeddingProvider | AiRerankingProvider;
 
 export type AiPricing = {
   version: string;
@@ -39,6 +75,7 @@ export type AiPricing = {
 };
 
 export class AiRuntimeConfigurationError extends Error {}
+export class AiRuntimeRequestError extends Error {}
 export class AiRuntimeProviderError extends Error {
   constructor(
     message: string,

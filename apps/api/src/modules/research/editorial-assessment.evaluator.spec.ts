@@ -17,7 +17,7 @@ describe('OpenAI-compatible AI Runtime provider', () => {
   const fetchMock = jest.fn();
   const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
   const secret = 'super-secret-api-key';
-  const request = { task: AiTask.CONTENT_ANGLE, projectId: 'project-1', systemPrompt: EDITORIAL_ASSESSMENT_SYSTEM_PROMPT, input: { privatePrompt: 'private-prompt-content' }, route: { task: AiTask.CONTENT_ANGLE, provider: 'openai', model: 'test-model', capability: AiCapability.STRUCTURED_GENERATION, timeoutMs: 60_000, fallback: null } };
+  const request = { task: AiTask.CONTENT_ANGLE, projectId: 'project-1', systemPrompt: EDITORIAL_ASSESSMENT_SYSTEM_PROMPT, input: { privatePrompt: 'private-prompt-content' }, route: { task: AiTask.CONTENT_ANGLE, provider: 'openai-cloud', model: 'test-model', capability: AiCapability.STRUCTURED_GENERATION, timeoutMs: 60_000, costMode: 'configured' as const, fallback: null } };
 
   beforeEach(() => {
     jest.resetAllMocks();

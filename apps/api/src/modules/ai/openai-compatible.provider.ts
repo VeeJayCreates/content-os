@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { AiProvider, AiProviderRequest, AiProviderResponse, AiUsage } from './ai-runtime.types';
+import type { AiProviderRequest, AiProviderResponse, AiStructuredGenerationProvider, AiUsage } from './ai-runtime.types';
 import { AiRuntimeConfigurationError, AiRuntimeProviderError } from './ai-runtime.types';
 
 @Injectable()
-export class OpenAiCompatibleProvider implements AiProvider {
-  readonly name = 'openai';
+export class OpenAiCompatibleProvider implements AiStructuredGenerationProvider {
+  readonly name = 'openai-cloud';
   private readonly logger = new Logger(OpenAiCompatibleProvider.name);
 
   async structuredGeneration(request: AiProviderRequest): Promise<AiProviderResponse> {
