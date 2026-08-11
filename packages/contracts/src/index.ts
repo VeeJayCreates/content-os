@@ -13,4 +13,5 @@ export * from "./job.js";
 export * from "./scene.js";
 export * from "./asset.js";
 export * from "./api.js";
+export * from "./ai.js";
 export * from "./enums.js";

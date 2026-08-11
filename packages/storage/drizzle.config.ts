@@ -11,6 +11,7 @@ export default defineConfig({
     "./src/schema/opportunity.ts",
     "./src/schema/opportunity-metrics.ts",
     "./src/schema/editorial-assessment.ts",
+    "./src/schema/ai-execution.ts",
     "./src/schema/research-package.ts",
     "./src/schema/topic-selection.ts",
     "./src/schema/job.ts",

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { StorageModule } from '../../storage/storage.module';
+import { AiRuntimeModule } from '../ai/ai-runtime.module';
 import { ResearchController } from './research.controller';
 import { ResearchService } from './research.service';
 import { IngestionService } from './ingestion.service';
@@ -20,7 +21,7 @@ import { EditorialAssessmentService } from './editorial-assessment.service';
 import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } from './editorial-assessment.evaluator';
 
 @Module({
-  imports: [StorageModule],
+  imports: [StorageModule, AiRuntimeModule],
   controllers: [
     ResearchController,
     SignalController,

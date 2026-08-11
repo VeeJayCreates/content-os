@@ -83,3 +83,6 @@ export enum EditorialAssessmentBand { LOW = 'low', MEDIUM = 'medium', HIGH = 'hi
 export enum EditorialAssessmentLongevity { BREAKING = 'breaking', TIMELY = 'timely', EVERGREEN = 'evergreen' }
 export enum EditorialAssessmentRecommendation { REJECT = 'reject', HOLD = 'hold', CONSIDER = 'consider', STRONG_CANDIDATE = 'strong_candidate' }
 export enum ContentAngleType { BREAKING = 'breaking', EXPLAINER = 'explainer', FACT_CHECK = 'fact_check', ANALYSIS = 'analysis', UPDATE = 'update' }
+export enum AiTask { CONTENT_ANGLE = 'content_angle' }
+export enum AiCapability { STRUCTURED_GENERATION = 'structured_generation', TEXT_GENERATION = 'text_generation', EMBEDDING = 'embedding', CLASSIFICATION = 'classification' }
+export enum AiExecutionStatus { SUCCEEDED = 'succeeded', FAILED = 'failed' }

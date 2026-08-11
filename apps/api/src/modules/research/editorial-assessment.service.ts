@@ -56,7 +56,7 @@ export class EditorialAssessmentService {
     try {
       const facts = input.researchPackage.facts;
       const signals = input.researchPackage.signals;
-      const output = this.validate(await this.evaluator.assess(input), new Set(facts.map((fact) => fact.id)), new Set(signals.map((signal) => signal.id)), opportunityId);
+      const output = this.validate(await this.evaluator.assess(input, opportunity.projectId), new Set(facts.map((fact) => fact.id)), new Set(signals.map((signal) => signal.id)), opportunityId);
       return this.toContract(await this.assessments.upsert({ ...base, status: EditorialAssessmentStatus.READY, ...output, editorialScore: score(output), evaluatorProvider: this.evaluator.provider, evaluatorModel: this.evaluator.model, errorCode: null, failureReason: null, assessedAt: new Date().toISOString() }));
     } catch (error) {
       this.logger.warn(JSON.stringify({ stage: 'editorial_assessment.service_catch', opportunityId, category: this.errorCategory(error) }));

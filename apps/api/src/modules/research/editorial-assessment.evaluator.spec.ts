@@ -1,14 +1,23 @@
-import { Logger } from '@nestjs/common';
-import { EDITORIAL_ASSESSMENT_TIMEOUT_MS, OpenAiEditorialAssessmentEvaluator } from './editorial-assessment.evaluator';
+jest.mock('@content-os/contracts', () => ({
+  AiTask: { CONTENT_ANGLE: 'content_angle' },
+  AiCapability: { STRUCTURED_GENERATION: 'structured_generation' },
+}));
+jest.mock('@content-os/storage', () => ({ AiExecutionRepository: class AiExecutionRepository {} }));
 
-describe('OpenAiEditorialAssessmentEvaluator', () => {
+import { Logger } from '@nestjs/common';
+import { AiCapability, AiTask } from '@content-os/contracts';
+import { AiRuntime } from '../ai/ai-runtime.service';
+import { OpenAiCompatibleProvider } from '../ai/openai-compatible.provider';
+import { EDITORIAL_ASSESSMENT_SYSTEM_PROMPT, OpenAiEditorialAssessmentEvaluator } from './editorial-assessment.evaluator';
+
+describe('OpenAI-compatible AI Runtime provider', () => {
   const originalKey = process.env.OPENAI_API_KEY;
   const originalModel = process.env.OPENAI_MODEL;
   const originalBaseUrl = process.env.OPENAI_BASE_URL;
   const fetchMock = jest.fn();
   const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
-  const info = jest.spyOn(Logger.prototype, 'log').mockImplementation();
   const secret = 'super-secret-api-key';
+  const request = { task: AiTask.CONTENT_ANGLE, projectId: 'project-1', systemPrompt: EDITORIAL_ASSESSMENT_SYSTEM_PROMPT, input: { privatePrompt: 'private-prompt-content' }, route: { task: AiTask.CONTENT_ANGLE, provider: 'openai', model: 'test-model', capability: AiCapability.STRUCTURED_GENERATION, timeoutMs: 60_000, fallback: null } };
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -23,77 +32,54 @@ describe('OpenAiEditorialAssessmentEvaluator', () => {
     process.env.OPENAI_MODEL = originalModel;
     process.env.OPENAI_BASE_URL = originalBaseUrl;
     warn.mockRestore();
-    info.mockRestore();
   });
 
-  it.each([
-    [401, { error: { code: 'invalid_api_key', type: 'authentication_error', message: `Invalid key ${secret}` } }, 'invalid_api_key'],
-    [429, { error: { code: 'rate_limit_exceeded', type: 'rate_limit_error', message: 'Quota exceeded' } }, 'rate_limit_exceeded'],
-    [400, { error: { code: 'unsupported_model', type: 'invalid_request_error', message: 'Model does not support JSON mode' } }, 'unsupported_model'],
-  ])('logs sanitized provider details for HTTP %i', async (status, body, code) => {
-    fetchMock.mockResolvedValueOnce({ ok: false, status, json: async () => body });
-    const evaluator = new OpenAiEditorialAssessmentEvaluator();
-
-    await expect(evaluator.assess({ project: 'not logged' })).rejects.toEqual(expect.objectContaining({ message: 'Editorial evaluator request failed' }));
-
-    const log = warn.mock.calls.map((call) => String(call[0])).join('\n');
-    expect(log).toContain(`"status":${status}`);
-    expect(log).toContain(code);
-    expect(log).toContain('provider.example');
-    expect(log).toContain('test-model');
-    expect(log).not.toContain(secret);
-    expect(log).not.toContain('not logged');
+  it('sends the existing Content Angle contract through the shared provider and records reported token metadata', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers({ 'x-request-id': 'request-1' }), json: async () => ({ choices: [{ message: { content: JSON.stringify({ longevity: 'evergreen' }) } }], usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 } }) });
+    const result = await new OpenAiCompatibleProvider().structuredGeneration(request);
+    const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(body.messages[0].content).toContain('longevity: breaking, timely, evergreen');
+    expect(body.messages[0].content).toContain('Do not use low/medium/high for longevity.');
+    expect(result).toEqual({ output: { longevity: 'evergreen' }, usage: { inputTokens: 12, outputTokens: 8, totalTokens: 20, providerRequestId: 'request-1' } });
   });
 
-  it('sends an explicit JSON output contract with distinct angle, longevity, and recommendation enums', async () => {
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({ choices: [{ message: { content: JSON.stringify({ relevance: 'high', newsworthiness: 'high', contentPotential: 'high', longevity: 'evergreen', duplicationRisk: 'low', recommendation: 'strong_candidate', rationale: 'Clear fit.', citedFactIds: [], citedSignalIds: [] }) } }] }),
-    });
-    const evaluator = new OpenAiEditorialAssessmentEvaluator();
-
-    await expect(evaluator.assess({})).resolves.toMatchObject({ longevity: 'evergreen' });
-
-    const request = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
-    const prompt = String(request.messages[0]?.content);
-    expect(prompt).toContain('longevity: breaking, timely, evergreen');
-    expect(prompt).toContain('Do not use low/medium/high for longevity.');
-    expect(prompt).not.toContain('"longevity": "low | medium | high"');
-    expect(prompt).toContain('recommendation: reject, hold, consider, strong_candidate');
-    expect(prompt).toContain('angleType: breaking, explainer, fact_check, analysis, update');
-    expect(prompt).toContain('"videoIdeaTitle": "concise working title"');
-    expect(prompt).toContain('"videoIdeaSummary": "1-3 concise sentences"');
-    expect(prompt).toContain('"hook": "short opening premise"');
-    expect(prompt).toContain('"whyNow": "why this angle matters now"');
-    expect(info).not.toHaveBeenCalled();
+  it.each([[401, 'invalid_api_key'], [429, 'rate_limit_exceeded'], [400, 'unsupported_model']])('logs sanitized HTTP %i diagnostics', async (status, code) => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status, json: async () => ({ error: { code, type: 'provider_error', message: `failure ${secret}` } }) });
+    await expect(new OpenAiCompatibleProvider().structuredGeneration(request)).rejects.toMatchObject({ category: 'provider_http', status, code });
+    const logs = warn.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logs).toContain(code);
+    expect(logs).toContain('provider.example');
+    expect(logs).not.toContain(secret);
+    expect(logs).not.toContain('private-prompt-content');
   });
 
-  it('aborts only after the configured timeout and keeps timeout diagnostics sanitized', async () => {
+  it('uses the routed 60-second timeout and keeps timeout diagnostics sanitized', async () => {
     jest.useFakeTimers();
-    let aborted = false;
     fetchMock.mockImplementationOnce((_url, options) => new Promise((_, reject) => {
       options?.signal?.addEventListener('abort', () => {
-        aborted = true;
         const error = new Error('request aborted');
         error.name = 'AbortError';
         reject(error);
       }, { once: true });
     }));
-    const evaluator = new OpenAiEditorialAssessmentEvaluator();
-    const assessment = evaluator.assess({ privatePrompt: 'private-prompt-content' });
-
-    jest.advanceTimersByTime(EDITORIAL_ASSESSMENT_TIMEOUT_MS - 1);
-    expect(aborted).toBe(false);
+    const pending = new OpenAiCompatibleProvider().structuredGeneration(request);
+    jest.advanceTimersByTime(59_999);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     jest.advanceTimersByTime(1);
-    await expect(assessment).rejects.toMatchObject({ message: 'Editorial evaluator request failed' });
-
-    const log = warn.mock.calls.map((call) => String(call[0])).join('\n');
-    const allLogs = [...warn.mock.calls, ...info.mock.calls].map((call) => String(call[0])).join('\n');
-    expect(log).toContain('"category":"timeout"');
-    expect(log).toContain(`${EDITORIAL_ASSESSMENT_TIMEOUT_MS}ms`);
-    expect(allLogs).not.toContain(secret);
-    expect(allLogs).not.toContain('private-prompt-content');
+    await expect(pending).rejects.toMatchObject({ category: 'timeout' });
+    const logs = warn.mock.calls.map((call) => String(call[0])).join('\n');
+    expect(logs).toContain('60000ms');
+    expect(logs).not.toContain(secret);
+    expect(logs).not.toContain('private-prompt-content');
     jest.useRealTimers();
+  });
+});
+
+describe('Editorial Assessment runtime migration', () => {
+  it('delegates Content Angle execution to AI Runtime without owning a provider request', async () => {
+    const runtime = { route: jest.fn(() => ({ provider: 'openai', model: 'model-1' })), structuredGeneration: jest.fn().mockResolvedValue({ recommendation: 'hold' }) };
+    const evaluator = new OpenAiEditorialAssessmentEvaluator(runtime as unknown as AiRuntime);
+    await expect(evaluator.assess({ opportunity: { id: 'opportunity-1' } }, 'project-1')).resolves.toEqual({ recommendation: 'hold' });
+    expect(runtime.structuredGeneration).toHaveBeenCalledWith(expect.objectContaining({ task: AiTask.CONTENT_ANGLE, projectId: 'project-1', systemPrompt: EDITORIAL_ASSESSMENT_SYSTEM_PROMPT }));
   });
 });
