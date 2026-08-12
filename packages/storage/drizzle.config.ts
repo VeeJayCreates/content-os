@@ -14,6 +14,7 @@ export default defineConfig({
     "./src/schema/ai-execution.ts",
     "./src/schema/research-package.ts",
     "./src/schema/topic-selection.ts",
+    "./src/schema/topic-candidate.ts",
     "./src/schema/job.ts",
     "./src/schema/workflow.ts",
   ],

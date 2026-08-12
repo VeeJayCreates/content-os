@@ -10,6 +10,7 @@ import {
   ResearchPackageRepository,
   TopicSelectionRepository,
   AiExecutionRepository,
+  TopicCandidateRepository,
 } from '@content-os/storage';
 
 export const storageProviders = [
@@ -48,4 +49,5 @@ export const storageProviders = [
     useFactory: () => new TopicSelectionRepository(),
   },
   { provide: AiExecutionRepository, useFactory: () => new AiExecutionRepository() },
+  { provide: TopicCandidateRepository, useFactory: () => new TopicCandidateRepository() },
 ];

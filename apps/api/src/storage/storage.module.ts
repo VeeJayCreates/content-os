@@ -13,6 +13,7 @@ import {
   ResearchPackageRepository,
   TopicSelectionRepository,
   AiExecutionRepository,
+  TopicCandidateRepository,
 } from '@content-os/storage';
 
 @Module({
@@ -29,6 +30,7 @@ import {
     ResearchPackageRepository,
     TopicSelectionRepository,
     AiExecutionRepository,
+    TopicCandidateRepository,
   ],
 })
 export class StorageModule {}
