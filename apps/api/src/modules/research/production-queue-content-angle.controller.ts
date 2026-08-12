@@ -1,0 +1,3 @@
+import { Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { ProductionQueueContentAngleService } from './production-queue-content-angle.service';
+@Controller('production-queue') export class ProductionQueueContentAngleController { constructor(private readonly service: ProductionQueueContentAngleService) {} @Post(':queueItemId/content-angle') generate(@Param('queueItemId', new ParseUUIDPipe()) id: string) { return this.service.generate(id); } @Get(':queueItemId/content-angle') find(@Param('queueItemId', new ParseUUIDPipe()) id: string) { return this.service.find(id); } }

@@ -17,6 +17,8 @@ import { OpportunityEvidenceService } from './opportunity-evidence.service';
 import { ResearchExpansionService } from './research-expansion.service';
 import { ProductionQueueController } from './production-queue.controller';
 import { ProductionQueueService } from './production-queue.service';
+import { ProductionQueueContentAngleController } from './production-queue-content-angle.controller';
+import { ProductionQueueContentAngleService } from './production-queue-content-angle.service';
 import { TopicSelectionController } from './topic-selection.controller';
 import { TopicSelectionService } from './topic-selection.service';
 import { YouTubeChannelResolver } from './youtube-channel-resolver';
@@ -35,6 +37,7 @@ import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } fr
     TopicSelectionController,
     EditorialAssessmentController,
     ProductionQueueController,
+    ProductionQueueContentAngleController,
   ],
   providers: [
     ResearchService,
@@ -46,6 +49,7 @@ import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } fr
     OpportunityEvidenceService,
     ResearchExpansionService,
     ProductionQueueService,
+    ProductionQueueContentAngleService,
     ResearchPackageService,
     TopicSelectionService,
     YouTubeChannelResolver,

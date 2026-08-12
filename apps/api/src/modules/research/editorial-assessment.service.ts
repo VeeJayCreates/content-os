@@ -39,13 +39,37 @@ export class EditorialAssessmentService {
     return this.toContract(hash === assessment.inputHash ? assessment : { ...assessment, status: EditorialAssessmentStatus.STALE });
   }
 
+  async findOneWithPackage(opportunity: NonNullable<Awaited<ReturnType<OpportunityRepository['findById']>>>, researchPackageId: string): Promise<EditorialAssessment> {
+    const assessment = await this.assessments.find(opportunity.projectId, opportunity.id);
+    if (!assessment) throw new NotFoundException('Editorial assessment not found');
+    const [profile, metric, researchPackage] = await Promise.all([
+      this.profiles.getOrCreateDefault(opportunity.projectId),
+      this.metrics.findByOpportunityId(opportunity.id, OPPORTUNITY_METRICS_V2_VERSION),
+      this.packages.findById(researchPackageId),
+    ]);
+    if (!metric || !researchPackage || researchPackage.projectId !== opportunity.projectId || researchPackage.opportunityId !== opportunity.id || researchPackage.status !== 'ready' || !assessment.angleType || !assessment.videoIdeaTitle || !assessment.videoIdeaSummary || !assessment.hook || !assessment.whyNow) return this.toContract({ ...assessment, status: EditorialAssessmentStatus.STALE });
+    const input = await this.inputFor(opportunity, profile, metric, researchPackage);
+    const hash = this.hash(input);
+    return this.toContract(hash === assessment.inputHash ? assessment : { ...assessment, status: EditorialAssessmentStatus.STALE });
+  }
+
   async assess(opportunityId: string): Promise<EditorialAssessment> {
     const opportunity = await this.opportunities.findById(opportunityId);
     if (!opportunity) throw new NotFoundException('Opportunity not found');
-    const [profile, metric, researchPackage] = await Promise.all([
+    const researchPackage = await this.packages.findByOpportunityId(opportunityId);
+    return this.assessWithResolvedPackage(opportunity, researchPackage);
+  }
+
+  async assessWithPackage(opportunity: NonNullable<Awaited<ReturnType<OpportunityRepository['findById']>>>, researchPackageId: string | undefined): Promise<EditorialAssessment> {
+    const researchPackage = researchPackageId ? await this.packages.findById(researchPackageId) : undefined;
+    return this.assessWithResolvedPackage(opportunity, researchPackage);
+  }
+
+  private async assessWithResolvedPackage(opportunity: NonNullable<Awaited<ReturnType<OpportunityRepository['findById']>>>, researchPackage: Awaited<ReturnType<ResearchPackageRepository['findByOpportunityId']>>): Promise<EditorialAssessment> {
+    const opportunityId = opportunity.id;
+    const [profile, metric] = await Promise.all([
       this.profiles.getOrCreateDefault(opportunity.projectId),
       this.metrics.findByOpportunityId(opportunityId, OPPORTUNITY_METRICS_V2_VERSION),
-      this.packages.findByOpportunityId(opportunityId),
     ]);
     if (!metric) throw new ConflictException('Opportunity Metrics V2 are required before editorial assessment');
     if (!researchPackage || researchPackage.status !== 'ready') throw new ConflictException('A ready Research Package is required before editorial assessment');
