@@ -11,6 +11,7 @@ import {
   TopicSelectionRepository,
   AiExecutionRepository,
   TopicCandidateRepository,
+  SemanticEmbeddingCacheRepository,
 } from '@content-os/storage';
 
 export const storageProviders = [
@@ -50,4 +51,5 @@ export const storageProviders = [
   },
   { provide: AiExecutionRepository, useFactory: () => new AiExecutionRepository() },
   { provide: TopicCandidateRepository, useFactory: () => new TopicCandidateRepository() },
+  { provide: SemanticEmbeddingCacheRepository, useFactory: () => new SemanticEmbeddingCacheRepository() },
 ];

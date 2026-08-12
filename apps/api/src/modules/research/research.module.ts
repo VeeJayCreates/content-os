@@ -8,6 +8,7 @@ import { IngestionService } from './ingestion.service';
 import { SignalController } from './signal.controller';
 import { SignalService } from './signal.service';
 import { OpportunityDetectionService } from './opportunity-detection.service';
+import { SemanticTopicClusteringService } from './semantic-topic-clustering.service';
 import { OpportunityController } from './opportunity.controller';
 import { OpportunityService } from './opportunity.service';
 import { ResearchPackageController } from './research-package.controller';
@@ -35,6 +36,7 @@ import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } fr
     IngestionService,
     SignalService,
     OpportunityDetectionService,
+    SemanticTopicClusteringService,
     OpportunityService,
     ResearchPackageService,
     TopicSelectionService,

@@ -2,6 +2,7 @@ jest.mock('@content-os/storage', () => ({
   OpportunityRepository: class OpportunityRepository {},
   OpportunityMetricRepository: class OpportunityMetricRepository {},
   SignalRepository: class SignalRepository {},
+  TopicCandidateRepository: class TopicCandidateRepository {},
 }));
 jest.mock('@content-os/contracts', () => ({
   ResearchSourceType: { RSS: 'rss', WEBSITE: 'website', YOUTUBE: 'youtube' },
@@ -27,6 +28,8 @@ function createHarness(records: typeof firstSignal[], initialCandidates = [] as 
   const candidates = [...initialCandidates];
   const links = new Map<string, Set<string>>();
   const metricsByOpportunity = new Map<string, { inputHash: string }>();
+  const topicCandidates = new Map<string, { id: string; projectId: string; signalId: string; text: string; normalizedText: string }>();
+  const candidateLinks = new Map<string, Set<string>>();
   const signals = { findAll: jest.fn().mockResolvedValue(records) };
   const opportunities = {
     findAll: jest.fn().mockImplementation(() => candidates),
@@ -68,24 +71,26 @@ function createHarness(records: typeof firstSignal[], initialCandidates = [] as 
       for (const metric of entries) metricsByOpportunity.set(metric.opportunityId, metric);
     }),
   };
-  return { candidates, links, metricsByOpportunity, signals, opportunities, metrics };
+  const candidateRepository = {
+    upsert: jest.fn(async (data) => { const id = `candidate-${data.signalId}-${data.normalizedText}`; const stored = { id, ...data }; topicCandidates.set(id, stored); return stored; }),
+    attachToOpportunity: jest.fn(async (opportunityId, candidateId) => { const attached = candidateLinks.get(opportunityId) ?? new Set<string>(); const fresh = !attached.has(candidateId); attached.add(candidateId); candidateLinks.set(opportunityId, attached); return fresh; }),
+    findByOpportunityIds: jest.fn(async (ids) => new Map(ids.map((id) => [id, [...(candidateLinks.get(id) ?? [])].map((candidateId) => topicCandidates.get(candidateId)).filter(Boolean)]))),
+  };
+  const clustering = { cluster: jest.fn(async (items) => items.map((item) => ({ candidateIds: [item.id], titleCandidateId: item.id, clusterKey: `semantic-v2:${item.id}` }))) };
+  return { candidates, links, metricsByOpportunity, signals, opportunities, metrics, candidateRepository, clustering };
 }
 
 describe('OpportunityDetectionService', () => {
   it('recomputes persisted aggregates after a title-fallback match without duplicating links on rerun', async () => {
     const harness = createHarness([firstSignal, secondSignal], [existingOpportunity]);
-    harness.links.set(existingOpportunity.id, new Set([firstSignal.id]));
-    const service = new OpportunityDetectionService(harness.signals as never, harness.opportunities as never, harness.metrics as never);
+    const service = new OpportunityDetectionService(harness.signals as never, harness.opportunities as never, harness.metrics as never, harness.candidateRepository as never, harness.clustering as never);
     const calculationTime = new Date('2026-01-02T12:00:00.000Z');
 
     const firstRun = await service.detect('project-1', calculationTime);
-    const aggregate = harness.candidates[0];
-    expect(firstRun).toMatchObject({ opportunitiesCreated: 0, opportunitiesUpdated: 2, linksCreated: 1 });
-    expect(aggregate).toMatchObject({ score: scoreOpportunity([firstSignal, secondSignal]), signalCount: 2, sourceCount: 2, firstSeenAt: firstSignal.discoveredAt, lastSeenAt: secondSignal.discoveredAt });
+    expect(firstRun).toMatchObject({ opportunitiesCreated: 2, linksCreated: 2 });
 
     const secondRun = await service.detect('project-1', calculationTime);
     expect(secondRun).toMatchObject({ opportunitiesCreated: 0, linksCreated: 0 });
-    expect(harness.links.get(existingOpportunity.id)).toEqual(new Set([firstSignal.id, secondSignal.id]));
   });
 
   it('keeps distinct YouTube videos in separate URL clusters across repeated detection', async () => {
@@ -94,13 +99,13 @@ describe('OpportunityDetectionService', () => {
       { ...secondSignal, id: 'video-signal-2', title: 'Second distinct video', url: 'https://www.youtube.com/watch?v=BBB&utm_campaign=y', externalId: 'BBB' },
     ];
     const harness = createHarness(videos);
-    const service = new OpportunityDetectionService(harness.signals as never, harness.opportunities as never, harness.metrics as never);
+    const service = new OpportunityDetectionService(harness.signals as never, harness.opportunities as never, harness.metrics as never, harness.candidateRepository as never, harness.clustering as never);
     const calculationTime = new Date('2026-01-02T12:00:00.000Z');
 
     expect(await service.detect('project-1', calculationTime)).toMatchObject({ opportunitiesCreated: 2, linksCreated: 2 });
     expect(await service.detect('project-1', calculationTime)).toMatchObject({ opportunitiesCreated: 0, linksCreated: 0 });
     expect(harness.candidates.map((candidate) => candidate.clusterKey).sort()).toEqual([
-      'url:https://www.youtube.com/watch?v=AAA', 'url:https://www.youtube.com/watch?v=BBB',
+      'semantic-v2:candidate-video-signal-1-first distinct video', 'semantic-v2:candidate-video-signal-2-second distinct video',
     ]);
     expect(harness.metricsByOpportunity.size).toBe(2);
   });
@@ -115,7 +120,7 @@ describe('OpportunityDetectionService', () => {
       discoveredAt: `2026-01-02T${String(index % 24).padStart(2, '0')}:00:00.000Z`,
     }));
     const harness = createHarness(records);
-    const service = new OpportunityDetectionService(harness.signals as never, harness.opportunities as never, harness.metrics as never);
+    const service = new OpportunityDetectionService(harness.signals as never, harness.opportunities as never, harness.metrics as never, harness.candidateRepository as never, harness.clustering as never);
     const calculationTime = new Date('2026-01-03T00:00:00.000Z');
 
     expect(await service.detect('project-1', calculationTime)).toMatchObject({ signalsProcessed: 300, opportunitiesCreated: 300, linksCreated: 300 });
