@@ -15,6 +15,7 @@ import {
   AiExecutionRepository,
   TopicCandidateRepository,
   SemanticEmbeddingCacheRepository,
+  ResearchExpansionRepository,
 } from '@content-os/storage';
 
 @Module({
@@ -33,6 +34,7 @@ import {
     AiExecutionRepository,
     TopicCandidateRepository,
     SemanticEmbeddingCacheRepository,
+    ResearchExpansionRepository,
   ],
 })
 export class StorageModule {}

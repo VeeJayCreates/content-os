@@ -73,3 +73,18 @@ export interface ResearchPackageGenerationResult {
   verification: ResearchVerification;
   warnings: string[];
 }
+
+export interface ResearchExpansionResult {
+  opportunityId: string;
+  status: 'skipped' | 'expanded' | 'exhausted' | 'failed';
+  queriesPlanned: number;
+  queriesSkipped: number;
+  sourcesSearched: number;
+  signalsDiscovered: number;
+  candidateEvidenceAccepted: number;
+  duplicateEvidenceRejected: number;
+  providerFailures: number;
+  verification: ResearchVerification;
+  warnings: string[];
+  runtimeMs: number;
+}
