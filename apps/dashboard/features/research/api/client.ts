@@ -162,3 +162,5 @@ export function getQueueContentAngle(queueItemId: string) { return requestUrl<Ed
 export function generateQueueContentAngle(queueItemId: string) { return requestUrl<EditorialAssessment>(`${apiEndpoint}/production-queue/${encodeURIComponent(queueItemId)}/content-angle`, { method: 'POST' }); }
 export function getQueueScript(queueItemId: string) { return requestUrl<ContentScript>(`${apiEndpoint}/production-queue/${encodeURIComponent(queueItemId)}/script`); }
 export function generateQueueScript(queueItemId: string) { return requestUrl<ContentScript>(`${apiEndpoint}/production-queue/${encodeURIComponent(queueItemId)}/script`, { method: 'POST', body: JSON.stringify({}) }); }
+export function getQueueContentPackage(queueItemId: string) { return requestUrl<ContentScript>(`${apiEndpoint}/production-queue/${encodeURIComponent(queueItemId)}/content-package`); }
+export function generateQueueContentPackage(queueItemId: string) { return requestUrl<ContentScript>(`${apiEndpoint}/production-queue/${encodeURIComponent(queueItemId)}/content-package`, { method: 'POST', body: JSON.stringify({}) }); }

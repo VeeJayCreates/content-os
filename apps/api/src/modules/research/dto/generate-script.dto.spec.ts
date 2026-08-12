@@ -2,6 +2,11 @@ import { ValidationPipe } from '@nestjs/common';
 jest.mock('@content-os/contracts', () => ({
   ScriptFormat: { YOUTUBE_SHORT: 'youtube_short', YOUTUBE_LONG: 'youtube_long' },
   ScriptLanguage: { HINDI: 'Hindi', HINGLISH: 'Hinglish', ENGLISH: 'English' },
+  ContentStylePreset: { CUSTOM: 'custom' },
+  ContentStyleIntensity: { NONE: 'none', LOW: 'low', MEDIUM: 'medium', HIGH: 'high' },
+  ContentTone: { CONVERSATIONAL: 'conversational' },
+  NarrationStyle: { EXPLAINER: 'explainer' },
+  HookStyle: { DIRECT: 'direct' },
 }));
 import { ScriptFormat, ScriptLanguage } from '@content-os/contracts';
 import { GenerateScriptDto } from './generate-script.dto';
@@ -33,5 +38,10 @@ describe('Script generation DTOs', () => {
     await expect(pipe.transform({ queueItemIds: ['11111111-1111-4111-8111-111111111111'] }, batchMetadata)).resolves.toEqual(expect.objectContaining({ queueItemIds: expect.any(Array) }));
     await expect(pipe.transform({ queueItemIds: [] }, batchMetadata)).rejects.toThrow();
     await expect(pipe.transform({ queueItemIds: ['not-a-uuid'] }, batchMetadata)).rejects.toThrow();
+  });
+
+  it('accepts a validated explicit presentation-style override without changing format validation', async () => {
+    await expect(pipe.transform({ style: { tone: 'conversational', energyLevel: 'high', sensitiveTopicSarcasmEnabled: false } }, metadata)).resolves.toEqual(expect.objectContaining({ style: expect.objectContaining({ energyLevel: 'high' }) }));
+    await expect(pipe.transform({ style: { tone: 'unsupported' } }, metadata)).rejects.toThrow();
   });
 });

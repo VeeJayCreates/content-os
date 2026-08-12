@@ -1,5 +1,5 @@
 jest.mock('@content-os/contracts', () => ({
-  AiTask: { CONTENT_ANGLE: 'content_angle', SEMANTIC_EMBEDDING: 'semantic_embedding', SEMANTIC_RERANKING: 'semantic_reranking' },
+  AiTask: { CONTENT_ANGLE: 'content_angle', CONTENT_PACKAGE_GENERATION: 'content_package_generation', SEMANTIC_EMBEDDING: 'semantic_embedding', SEMANTIC_RERANKING: 'semantic_reranking' },
   AiCapability: { STRUCTURED_GENERATION: 'structured_generation', EMBEDDING: 'embedding', RERANKING: 'reranking' },
   AiExecutionStatus: { SUCCEEDED: 'succeeded', FAILED: 'failed' },
 }));
@@ -58,6 +58,13 @@ describe('AiRuntime', () => {
     expect(new ModelRouter().route(AiTask.CONTENT_ANGLE).model).toBe('task-model');
     process.env.AI_CONTENT_ANGLE_MODEL = originalTaskModel;
     process.env.OPENAI_MODEL = originalDefaultModel;
+  });
+
+  it('routes content packages through the configurable creative model', () => {
+    const original = process.env.AI_CONTENT_PACKAGE_MODEL;
+    process.env.AI_CONTENT_PACKAGE_MODEL = 'content-package-model';
+    expect(new ModelRouter().route(AiTask.CONTENT_PACKAGE_GENERATION)).toMatchObject({ provider: 'openai-cloud', model: 'content-package-model', capability: AiCapability.STRUCTURED_GENERATION });
+    process.env.AI_CONTENT_PACKAGE_MODEL = original;
   });
 
   it('rejects an unknown task without selecting a provider', () => {

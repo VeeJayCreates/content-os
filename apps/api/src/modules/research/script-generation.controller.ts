@@ -18,6 +18,16 @@ export class ScriptGenerationController {
     return this.batches.consumeCompletedScriptBatch(batchId);
   }
 
+  @Post('content-packages/batch')
+  submitContentPackageBatch(@Body() body: ScriptBatchDto) {
+    return this.batches.submitScriptBatch(body.queueItemIds);
+  }
+
+  @Post('content-packages/batch/:batchId/reconcile')
+  reconcileContentPackageBatch(@Param('batchId', new ParseUUIDPipe()) batchId: string) {
+    return this.batches.consumeCompletedScriptBatch(batchId);
+  }
+
   @Post(':queueItemId/script')
   generate(@Param('queueItemId', new ParseUUIDPipe()) id: string, @Body() body: GenerateScriptDto) {
     return this.scripts.generate(id, body);
@@ -25,6 +35,16 @@ export class ScriptGenerationController {
 
   @Get(':queueItemId/script')
   find(@Param('queueItemId', new ParseUUIDPipe()) id: string) {
+    return this.scripts.find(id);
+  }
+
+  @Post(':queueItemId/content-package')
+  generateContentPackage(@Param('queueItemId', new ParseUUIDPipe()) id: string, @Body() body: GenerateScriptDto) {
+    return this.scripts.generate(id, body);
+  }
+
+  @Get(':queueItemId/content-package')
+  findContentPackage(@Param('queueItemId', new ParseUUIDPipe()) id: string) {
     return this.scripts.find(id);
   }
 }

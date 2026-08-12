@@ -1,11 +1,17 @@
-jest.mock('@content-os/storage', () => ({ ContentScriptRepository: class {}, EditorialAssessmentRepository: class {}, ProductionQueueRepository: class {}, ResearchPackageRepository: class {} }));
+jest.mock('@content-os/storage', () => ({ ContentScriptRepository: class {}, ContentStyleProfileRepository: class {}, EditorialAssessmentRepository: class {}, ProductionQueueRepository: class {}, ResearchPackageRepository: class {} }));
 jest.mock('@content-os/contracts', () => ({
-  AiTask: { SCRIPT_GENERATION: 'script_generation' },
+  AiTask: { SCRIPT_GENERATION: 'script_generation', CONTENT_PACKAGE_GENERATION: 'content_package_generation' },
   AiExecutionMode: { SYNCHRONOUS: 'synchronous', BATCH: 'batch' },
   ProductionQueueStatus: { FAILED: 'failed' },
   ScriptFormat: { YOUTUBE_SHORT: 'youtube_short', YOUTUBE_LONG: 'youtube_long' },
   ScriptLanguage: { HINDI: 'Hindi', HINGLISH: 'Hinglish', ENGLISH: 'English' },
   ScriptStatus: { READY: 'ready' },
+  ContentStylePreset: { CUSTOM: 'custom', GEOPOLITICS_NEWS: 'geopolitics_news' },
+  ContentStyleIntensity: { NONE: 'none', LOW: 'low', MEDIUM: 'medium', HIGH: 'high' },
+  ContentTone: { CONVERSATIONAL_AUTHORITATIVE: 'conversational_authoritative' },
+  NarrationStyle: { EXPLAINER: 'explainer', COMMENTARY_EXPLAINER: 'commentary_explainer' },
+  HookStyle: { DIRECT: 'direct', CURIOSITY_DRIVEN: 'curiosity_driven' },
+  normalizeContentStyleProfile: (value: object) => { const { projectId, createdAt, updatedAt, ...style } = value as { projectId: string; createdAt: string; updatedAt: string }; return style; },
 }));
 jest.mock('../ai/ai-runtime.service', () => ({ AiRuntime: class {} }));
 
@@ -18,12 +24,13 @@ describe('ScriptGenerationService', () => {
   const packages = { findFactsWithEvidenceByPackageIds: jest.fn() };
   const assessments = { find: jest.fn() };
   const scripts = { findByQueueItemId: jest.fn(), upsert: jest.fn() };
+  const styles = { findByProjectId: jest.fn() };
   const runtime = { structuredGeneration: jest.fn(), route: jest.fn() };
-  const service = () => new ScriptGenerationService(queue as never, angles as never, packages as never, assessments as never, scripts as never, runtime as never);
+  const service = () => new ScriptGenerationService(queue as never, angles as never, packages as never, assessments as never, scripts as never, styles as never, runtime as never);
   const context = { item: { id: 'queue-1', researchPackageId: 'package-1' }, opportunity: { id: 'opportunity-1', projectId: 'project-1' } };
   const angle = { id: 'angle-1', status: 'ready', researchPackageId: 'package-1', angleType: 'explainer', videoIdeaTitle: 'FCAS explained', videoIdeaSummary: 'summary', hook: 'why now', whyNow: 'now' };
   const facts = [{ id: 'fact-1', claim: 'Verified FCAS fact', status: 'supported', signalId: 'signal-1' }];
-  const output = { hook: 'Why this matters', body: 'The verified body narration.', closing: 'Follow for more.', fullScript: 'Why this matters. The verified body narration. Follow for more.', citedFactIds: ['fact-1'] };
+  const output = { hook: 'Why this matters', body: 'The verified body narration.', closing: 'Follow for more.', fullScript: 'Why this matters. The verified body narration. Follow for more.', citedFactIds: ['fact-1'], primaryTitle: 'Why FCAS matters', alternateTitles: ['FCAS explained', 'India and FCAS'], description: 'A grounded FCAS explanation.', tags: ['FCAS', 'India'], hashtags: ['#FCAS'], keywords: ['FCAS programme'], thumbnailText: 'FCAS EXPLAINED', thumbnailCreativeBrief: 'A clean aircraft silhouette and India-France contrast.', metadataFactIds: ['fact-1'] };
 
   beforeEach(() => {
     jest.resetAllMocks();
@@ -31,15 +38,16 @@ describe('ScriptGenerationService', () => {
     assessments.find.mockResolvedValue(angle);
     packages.findFactsWithEvidenceByPackageIds.mockResolvedValue(new Map([['package-1', facts]]));
     scripts.findByQueueItemId.mockResolvedValue(undefined);
+    styles.findByProjectId.mockResolvedValue(undefined);
     scripts.upsert.mockImplementation(async (value: object) => ({ id: 'script-1', ...value }));
     runtime.structuredGeneration.mockResolvedValue(output);
     runtime.route.mockReturnValue({ provider: 'openai-cloud', model: 'gpt-test' });
   });
 
-  it('generates an eligible corroborated queue item via SCRIPT_GENERATION and persists through the shared path', async () => {
+  it('generates one complete Content Package through the shared persistence path', async () => {
     const generated = await service().generate('queue-1');
-    expect(runtime.structuredGeneration).toHaveBeenCalledWith(expect.objectContaining({ task: 'script_generation', projectId: 'project-1' }));
-    expect(generated).toEqual(expect.objectContaining({ researchPackageId: 'package-1', status: 'ready', executionMode: 'synchronous' }));
+    expect(runtime.structuredGeneration).toHaveBeenCalledWith(expect.objectContaining({ task: 'content_package_generation', projectId: 'project-1' }));
+    expect(generated).toEqual(expect.objectContaining({ researchPackageId: 'package-1', status: 'ready', executionMode: 'synchronous', primaryTitle: 'Why FCAS matters', thumbnailText: 'FCAS EXPLAINED' }));
     expect(queue.updateStatus).not.toHaveBeenCalled();
   });
 
@@ -108,6 +116,28 @@ describe('ScriptGenerationService', () => {
     change();
     const after = await service().prepare('queue-1');
     expect(after.inputHash).not.toBe(before.inputHash);
+  });
+
+  it('includes the normalized stored style in the input and invalidates when it changes', async () => {
+    styles.findByProjectId.mockResolvedValue({ projectId: 'project-1', preset: 'geopolitics_news', primaryLanguage: 'Hinglish', secondaryLanguage: 'Hindi', tone: 'conversational_authoritative', narrationStyle: 'commentary_explainer', hookStyle: 'curiosity_driven', desiWordingLevel: 'high', sarcasmLevel: 'medium', humorLevel: 'low', energyLevel: 'high', sensationalismLevel: 'low', audienceDescription: 'Indian audience', preferredVocabulary: ['FCAS'], avoidedVocabulary: [], customInstructions: '', sensitiveTopicSarcasmEnabled: false, createdAt: 'one', updatedAt: 'one' });
+    const before = await service().prepare('queue-1');
+    styles.findByProjectId.mockResolvedValue({ ...(await styles.findByProjectId()), sarcasmLevel: 'low' });
+    const after = await service().prepare('queue-1');
+    expect(before.input.language).toBe('Hinglish');
+    expect(before.input.style.desiWordingLevel).toBe('high');
+    expect(after.inputHash).not.toBe(before.inputHash);
+  });
+
+  it('allows an explicit generation style override to take precedence', async () => {
+    await service().prepare('queue-1', { language: ScriptLanguage.HINDI, style: { sarcasmLevel: 'low' } });
+    expect((await service().prepare('queue-1', { language: ScriptLanguage.HINDI, style: { sarcasmLevel: 'low' } })).input).toEqual(expect.objectContaining({ language: ScriptLanguage.HINDI, style: expect.objectContaining({ sarcasmLevel: 'low' }) }));
+  });
+
+  it('rejects metadata with unsupported citations or duplicate alternate titles', async () => {
+    runtime.structuredGeneration.mockResolvedValue({ ...output, metadataFactIds: ['invented'] });
+    await expect(service().generate('queue-1')).rejects.toThrow('unsupported facts');
+    runtime.structuredGeneration.mockResolvedValue({ ...output, alternateTitles: ['same', 'same'] });
+    await expect(service().generate('queue-1')).rejects.toThrow('metadata contains duplicates');
   });
 
   it.each([

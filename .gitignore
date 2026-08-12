@@ -42,3 +42,4 @@ yarn-error.log*
 # Local SQLite development databases
 /content-os.db
 /apps/api/content-os.db
+apps/api/*.db

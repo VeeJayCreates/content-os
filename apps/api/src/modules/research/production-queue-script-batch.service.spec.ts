@@ -1,6 +1,6 @@
 jest.mock('@content-os/storage', () => ({ ProductionQueueRepository: class {} }));
 jest.mock('@content-os/contracts', () => ({
-  AiTask: { SCRIPT_GENERATION: 'script_generation' },
+  AiTask: { SCRIPT_GENERATION: 'script_generation', CONTENT_PACKAGE_GENERATION: 'content_package_generation' },
   AiBatchStatus: { COMPLETED: 'completed' },
   AiBatchItemStatus: { COMPLETED: 'completed', FAILED: 'failed' },
   AiExecutionMode: { BATCH: 'batch' },
@@ -25,7 +25,8 @@ describe('ProductionQueueScriptBatchService', () => {
 
     await expect(service().submitScriptBatch(['one', 'ineligible', 'two'])).resolves.toEqual(expect.objectContaining({ batchId: 'batch-1', submittedItemIds: ['one', 'two'] }));
     const submitted = runtime.submit.mock.calls[0][1];
-    expect(submitted.map((item: { customId: string }) => item.customId)).toEqual(['script:one:hash-one', 'script:two:hash-two']);
+    expect(runtime.submit).toHaveBeenCalledWith('content_package_generation', expect.any(Array));
+    expect(submitted.map((item: { customId: string }) => item.customId)).toEqual(['content-package:one:hash-one', 'content-package:two:hash-two']);
     expect(queue.updateStatus).toHaveBeenCalledWith('one', 'processing');
     expect(queue.updateStatus).toHaveBeenCalledWith('two', 'processing');
   });
@@ -35,7 +36,7 @@ describe('ProductionQueueScriptBatchService', () => {
       { customId: 'script:two:hash-two', entityType: 'production_queue_item', entityId: 'two', promptHash: 'hash-two', status: 'queued' },
       { customId: 'script:one:hash-one', entityType: 'production_queue_item', entityId: 'one', promptHash: 'hash-one', status: 'queued' },
     ], results: [
-      { customId: 'script:one:hash-one', status: 'completed', output: { hook: 'Hook', body: 'Body', closing: 'Close', fullScript: 'All', citedFactIds: ['fact-one'] }, usage: { inputTokens: 3, outputTokens: 2 } },
+      { customId: 'script:one:hash-one', status: 'completed', output: { hook: 'Hook', body: 'Body', closing: 'Close', fullScript: 'All', citedFactIds: ['fact-one'], primaryTitle: 'Title', alternateTitles: ['Alternate'], description: 'Description', tags: ['tag'], hashtags: ['#tag'], keywords: ['keyword'], thumbnailText: 'Thumbnail', thumbnailCreativeBrief: 'Brief', metadataFactIds: ['fact-one'] }, usage: { inputTokens: 3, outputTokens: 2 } },
       { customId: 'script:two:hash-two', status: 'failed', errorCategory: 'provider_failure', errorCode: 'rate_limit', usage: { inputTokens: null, outputTokens: null } },
     ] });
     scripts.prepare.mockImplementation((id: string) => Promise.resolve(prepared(id)));
@@ -43,6 +44,7 @@ describe('ProductionQueueScriptBatchService', () => {
 
     await expect(service().consumeCompletedScriptBatch('batch-1')).resolves.toEqual({ batchId: 'batch-1', processed: 2, succeeded: 1, failed: 1 });
     expect(scripts.persistPrepared).toHaveBeenCalledWith(expect.objectContaining({ queueItemId: 'one' }), expect.any(Object), 'batch');
+    expect(scripts.persistPrepared.mock.calls[0][1]).toEqual(expect.objectContaining({ primaryTitle: 'Title', thumbnailCreativeBrief: 'Brief' }));
     expect(queue.updateStatus).toHaveBeenCalledWith('two', 'failed');
     expect(queue.updateStatus).not.toHaveBeenCalledWith('one', 'completed');
   });

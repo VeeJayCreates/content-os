@@ -17,7 +17,7 @@ export class ProductionQueueScriptBatchService {
       try {
         const script = await this.scripts.prepare(queueItemId);
         if (script.cached) skipped.push({ queueItemId, reason: 'Script is already current' });
-        else prepared.push({ queueItemId, customId: `script:${queueItemId}:${script.inputHash.slice(0, 16)}`, prepared: script });
+        else prepared.push({ queueItemId, customId: `content-package:${queueItemId}:${script.inputHash.slice(0, 16)}`, prepared: script });
       } catch (error) {
         skipped.push({ queueItemId, reason: error instanceof Error ? error.message : 'Queue item is not eligible for script generation' });
       }
@@ -28,7 +28,7 @@ export class ProductionQueueScriptBatchService {
   async submitScriptBatch(queueItemIds: readonly string[]) {
     const { prepared, skipped } = await this.prepareScriptBatch(queueItemIds);
     if (!prepared.length) return { batchId: null, submittedItemIds: [], skipped };
-    const batch = await this.runtime.submit(AiTask.SCRIPT_GENERATION, prepared.map((item) => ({
+    const batch = await this.runtime.submit(AiTask.CONTENT_PACKAGE_GENERATION, prepared.map((item) => ({
       customId: item.customId,
       projectId: item.prepared.projectId,
       entityType: 'production_queue_item',
