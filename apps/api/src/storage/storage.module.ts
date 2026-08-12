@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { storageProviders } from './storage.providers';
 import {
   ContentRepository,
+  ContentStyleProfileRepository,
   ProjectRepository,
   ProjectEditorialProfileRepository,
   ResearchSourceRepository,
@@ -25,6 +26,7 @@ import {
   providers: [...storageProviders],
   exports: [
     ContentRepository,
+    ContentStyleProfileRepository,
     ProjectRepository,
     ProjectEditorialProfileRepository,
     ResearchSourceRepository,

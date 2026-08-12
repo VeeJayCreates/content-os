@@ -16,4 +16,5 @@ export * from "./asset.js";
 export * from "./api.js";
 export * from "./ai.js";
 export * from "./script.js";
+export * from "./content-style-profile.js";
 export * from "./enums.js";

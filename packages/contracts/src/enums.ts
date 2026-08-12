@@ -96,6 +96,11 @@ export enum AiTask { CONTENT_ANGLE = 'content_angle', SCRIPT_GENERATION = 'scrip
 export enum ScriptStatus { GENERATING = 'generating', READY = 'ready', FAILED = 'failed' }
 export enum ScriptFormat { YOUTUBE_SHORT = 'youtube_short', YOUTUBE_LONG = 'youtube_long' }
 export enum ScriptLanguage { HINDI = 'Hindi', HINGLISH = 'Hinglish', ENGLISH = 'English' }
+export enum ContentStylePreset { GEOPOLITICS_NEWS = 'geopolitics_news', EDUCATIONAL = 'educational', DOCUMENTARY = 'documentary', TECHNOLOGY = 'technology', FINANCE = 'finance', ENTERTAINMENT = 'entertainment', CUSTOM = 'custom' }
+export enum ContentStyleIntensity { NONE = 'none', LOW = 'low', MEDIUM = 'medium', HIGH = 'high' }
+export enum ContentTone { CONVERSATIONAL = 'conversational', AUTHORITATIVE = 'authoritative', CONVERSATIONAL_AUTHORITATIVE = 'conversational_authoritative', NEUTRAL = 'neutral' }
+export enum NarrationStyle { EXPLAINER = 'explainer', COMMENTARY_EXPLAINER = 'commentary_explainer', DOCUMENTARY = 'documentary', STORYTELLING = 'storytelling' }
+export enum HookStyle { PUNCHY = 'punchy', CURIOSITY_DRIVEN = 'curiosity_driven', DIRECT = 'direct', QUESTION = 'question' }
 export enum AiCapability { STRUCTURED_GENERATION = 'structured_generation', TEXT_GENERATION = 'text_generation', EMBEDDING = 'embedding', RERANKING = 'reranking', CLASSIFICATION = 'classification' }
 export enum AiExecutionStatus { SUCCEEDED = 'succeeded', FAILED = 'failed' }
 export enum AiExecutionMode { SYNCHRONOUS = 'synchronous', BATCH = 'batch' }

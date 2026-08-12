@@ -5,6 +5,8 @@ import type {
   Project,
   ProjectEditorialProfile,
   ProjectEditorialProfileUpdateInput,
+  ProjectContentStyleProfile,
+  ProjectContentStyleProfileUpdateInput,
 } from "@content-os/contracts";
 
 const projectsEndpoint = "/api/projects";
@@ -103,3 +105,6 @@ export function updateProjectEditorialProfile(
     },
   );
 }
+
+export function getContentStyleProfile(projectId: string) { return request<ProjectContentStyleProfile>(`/${encodeURIComponent(projectId)}/content-style`); }
+export function updateContentStyleProfile(projectId: string, profile: ProjectContentStyleProfileUpdateInput) { return request<ProjectContentStyleProfile>(`/${encodeURIComponent(projectId)}/content-style`, { method: 'PUT', body: JSON.stringify(profile) }); }

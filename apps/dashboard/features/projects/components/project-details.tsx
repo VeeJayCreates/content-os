@@ -7,6 +7,7 @@ import { formatContentType, formatProjectDate, formatProjectStatus, getStatusVar
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProjectEditorialProfileEditor } from "@/features/projects/components/project-editorial-profile";
+import { ContentStyleProfileEditor } from "@/features/projects/components/content-style-profile";
 
 type ProjectDetailsProps = {
   project: Project;
@@ -38,6 +39,7 @@ export function ProjectDetails({ project }: ProjectDetailsProps) {
         </CardContent>
       </Card>
       <ProjectEditorialProfileEditor key={project.id} projectId={project.id} />
+      <ContentStyleProfileEditor key={`style-${project.id}`} projectId={project.id} />
     </section>
   );
 }

@@ -1,5 +1,6 @@
 import {
   ContentRepository,
+  ContentStyleProfileRepository,
   ProjectRepository,
   ResearchSourceRepository,
   SignalRepository,
@@ -31,6 +32,7 @@ export const storageProviders = [
     provide: ContentRepository,
     useFactory: () => new ContentRepository(),
   },
+  { provide: ContentStyleProfileRepository, useFactory: () => new ContentStyleProfileRepository() },
   {
     provide: ResearchSourceRepository,
     useFactory: () => new ResearchSourceRepository(),
