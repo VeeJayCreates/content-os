@@ -92,7 +92,10 @@ export enum EditorialAssessmentBand { LOW = 'low', MEDIUM = 'medium', HIGH = 'hi
 export enum EditorialAssessmentLongevity { BREAKING = 'breaking', TIMELY = 'timely', EVERGREEN = 'evergreen' }
 export enum EditorialAssessmentRecommendation { REJECT = 'reject', HOLD = 'hold', CONSIDER = 'consider', STRONG_CANDIDATE = 'strong_candidate' }
 export enum ContentAngleType { BREAKING = 'breaking', EXPLAINER = 'explainer', FACT_CHECK = 'fact_check', ANALYSIS = 'analysis', UPDATE = 'update' }
-export enum AiTask { CONTENT_ANGLE = 'content_angle', SEMANTIC_EMBEDDING = 'semantic_embedding', SEMANTIC_RERANKING = 'semantic_reranking' }
+export enum AiTask { CONTENT_ANGLE = 'content_angle', SCRIPT_GENERATION = 'script_generation', SEMANTIC_EMBEDDING = 'semantic_embedding', SEMANTIC_RERANKING = 'semantic_reranking' }
+export enum ScriptStatus { GENERATING = 'generating', READY = 'ready', FAILED = 'failed' }
+export enum ScriptFormat { YOUTUBE_SHORT = 'youtube_short', YOUTUBE_LONG = 'youtube_long' }
+export enum ScriptLanguage { HINDI = 'Hindi', HINGLISH = 'Hinglish', ENGLISH = 'English' }
 export enum AiCapability { STRUCTURED_GENERATION = 'structured_generation', TEXT_GENERATION = 'text_generation', EMBEDDING = 'embedding', RERANKING = 'reranking', CLASSIFICATION = 'classification' }
 export enum AiExecutionStatus { SUCCEEDED = 'succeeded', FAILED = 'failed' }
 export enum AiExecutionMode { SYNCHRONOUS = 'synchronous', BATCH = 'batch' }

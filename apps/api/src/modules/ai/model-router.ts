@@ -13,6 +13,8 @@ export class ModelRouter {
     switch (task) {
       case AiTask.CONTENT_ANGLE:
         return { task, provider: this.cloudProvider(), model: process.env.AI_CONTENT_ANGLE_MODEL ?? process.env.OPENAI_MODEL ?? null, capability: AiCapability.STRUCTURED_GENERATION, timeoutMs: CONTENT_ANGLE_TIMEOUT_MS, costMode: 'configured', fallback: null };
+      case AiTask.SCRIPT_GENERATION:
+        return { task, provider: this.cloudProvider(), model: process.env.AI_SCRIPT_GENERATION_MODEL ?? process.env.OPENAI_MODEL ?? null, capability: AiCapability.STRUCTURED_GENERATION, timeoutMs: CONTENT_ANGLE_TIMEOUT_MS, costMode: 'configured', fallback: null };
       case AiTask.SEMANTIC_EMBEDDING:
         return { task, provider: 'local-qwen-embedding', model: process.env.AI_LOCAL_EMBEDDING_MODEL ?? 'Qwen3-Embedding-0.6B', capability: AiCapability.EMBEDDING, timeoutMs: this.timeout('AI_LOCAL_EMBEDDING_TIMEOUT_MS', LOCAL_EMBEDDING_TIMEOUT_MS), costMode: 'zero', fallback: null };
       case AiTask.SEMANTIC_RERANKING:

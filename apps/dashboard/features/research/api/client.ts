@@ -18,6 +18,7 @@ import type {
   Signal,
   ProductionQueueItem,
   FillProductionQueueResult,
+  ContentScript,
   UpdateResearchSourceInput,
 } from "@content-os/contracts";
 
@@ -159,3 +160,5 @@ export function getProductionQueue(projectId: string) { return requestUrl<Produc
 export function fillProductionQueue(projectId: string, targetCount: number) { return requestUrl<FillProductionQueueResult>(`${apiEndpoint}/projects/${encodeURIComponent(projectId)}/production-queue/fill`, { method: 'POST', body: JSON.stringify({ targetCount }) }); }
 export function getQueueContentAngle(queueItemId: string) { return requestUrl<EditorialAssessment>(`${apiEndpoint}/production-queue/${encodeURIComponent(queueItemId)}/content-angle`); }
 export function generateQueueContentAngle(queueItemId: string) { return requestUrl<EditorialAssessment>(`${apiEndpoint}/production-queue/${encodeURIComponent(queueItemId)}/content-angle`, { method: 'POST' }); }
+export function getQueueScript(queueItemId: string) { return requestUrl<ContentScript>(`${apiEndpoint}/production-queue/${encodeURIComponent(queueItemId)}/script`); }
+export function generateQueueScript(queueItemId: string) { return requestUrl<ContentScript>(`${apiEndpoint}/production-queue/${encodeURIComponent(queueItemId)}/script`, { method: 'POST', body: JSON.stringify({}) }); }

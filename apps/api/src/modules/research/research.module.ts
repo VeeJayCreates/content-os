@@ -20,6 +20,9 @@ import { ProductionQueueService } from './production-queue.service';
 import { ProductionQueueContentAngleController } from './production-queue-content-angle.controller';
 import { ProductionQueueContentAngleService } from './production-queue-content-angle.service';
 import { ProductionQueueContentAngleBatchService } from './production-queue-content-angle-batch.service';
+import { ScriptGenerationController } from './script-generation.controller';
+import { ScriptGenerationService } from './script-generation.service';
+import { ProductionQueueScriptBatchService } from './production-queue-script-batch.service';
 import { TopicSelectionController } from './topic-selection.controller';
 import { TopicSelectionService } from './topic-selection.service';
 import { YouTubeChannelResolver } from './youtube-channel-resolver';
@@ -39,6 +42,7 @@ import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } fr
     EditorialAssessmentController,
     ProductionQueueController,
     ProductionQueueContentAngleController,
+    ScriptGenerationController,
   ],
   providers: [
     ResearchService,
@@ -52,6 +56,8 @@ import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } fr
     ProductionQueueService,
     ProductionQueueContentAngleService,
     ProductionQueueContentAngleBatchService,
+    ScriptGenerationService,
+    ProductionQueueScriptBatchService,
     ResearchPackageService,
     TopicSelectionService,
     YouTubeChannelResolver,
