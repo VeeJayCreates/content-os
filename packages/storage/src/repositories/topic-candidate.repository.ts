@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, count, eq, inArray } from 'drizzle-orm';
 
 import { db } from '../db.js';
 import { opportunities } from '../schema/opportunity.js';
@@ -11,9 +11,9 @@ import { signals } from '../schema/signal.js';
 export class TopicCandidateProjectMismatchError extends Error {}
 
 export type OpportunityTopicCandidate = TopicCandidate & {
+  signal: typeof signals.$inferSelect;
   sourceName: string;
   sourceId: string;
-  signalTitle: string;
 };
 
 export type CandidateContributionCounts = {
@@ -59,9 +59,19 @@ export class TopicCandidateRepository {
   async findByOpportunityIds(opportunityIds: string[]): Promise<Map<string, OpportunityTopicCandidate[]>> {
     const grouped = new Map<string, OpportunityTopicCandidate[]>();
     if (opportunityIds.length === 0) return grouped;
-    const rows = await db.select({ opportunityId: opportunityTopicCandidates.opportunityId, candidate: topicCandidates, sourceId: researchSources.id, sourceName: researchSources.name, signalTitle: signals.title }).from(opportunityTopicCandidates).innerJoin(topicCandidates, eq(opportunityTopicCandidates.topicCandidateId, topicCandidates.id)).innerJoin(signals, eq(topicCandidates.signalId, signals.id)).innerJoin(researchSources, eq(signals.researchSourceId, researchSources.id)).where(inArray(opportunityTopicCandidates.opportunityId, opportunityIds));
-    for (const row of rows) grouped.set(row.opportunityId, [...(grouped.get(row.opportunityId) ?? []), { ...row.candidate, sourceId: row.sourceId, sourceName: row.sourceName, signalTitle: row.signalTitle }]);
+    const rows = await db.select({ opportunityId: opportunityTopicCandidates.opportunityId, candidate: topicCandidates, signal: signals, sourceId: researchSources.id, sourceName: researchSources.name }).from(opportunityTopicCandidates).innerJoin(topicCandidates, eq(opportunityTopicCandidates.topicCandidateId, topicCandidates.id)).innerJoin(signals, eq(topicCandidates.signalId, signals.id)).innerJoin(researchSources, eq(signals.researchSourceId, researchSources.id)).where(inArray(opportunityTopicCandidates.opportunityId, opportunityIds));
+    for (const row of rows) grouped.set(row.opportunityId, [...(grouped.get(row.opportunityId) ?? []), { ...row.candidate, signal: row.signal, sourceId: row.sourceId, sourceName: row.sourceName }]);
     return grouped;
+  }
+
+  async membershipCountsByOpportunityIds(opportunityIds: string[]): Promise<Map<string, number>> {
+    if (opportunityIds.length === 0) return new Map();
+    const rows = await db
+      .select({ opportunityId: opportunityTopicCandidates.opportunityId, membershipCount: count() })
+      .from(opportunityTopicCandidates)
+      .where(inArray(opportunityTopicCandidates.opportunityId, opportunityIds))
+      .groupBy(opportunityTopicCandidates.opportunityId);
+    return new Map(rows.map((row) => [row.opportunityId, row.membershipCount]));
   }
 
   async contributionCountsByOpportunityIds(opportunityIds: string[]): Promise<Map<string, CandidateContributionCounts>> {

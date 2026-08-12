@@ -13,6 +13,7 @@ import { OpportunityController } from './opportunity.controller';
 import { OpportunityService } from './opportunity.service';
 import { ResearchPackageController } from './research-package.controller';
 import { ResearchPackageService } from './research-package.service';
+import { OpportunityEvidenceService } from './opportunity-evidence.service';
 import { TopicSelectionController } from './topic-selection.controller';
 import { TopicSelectionService } from './topic-selection.service';
 import { YouTubeChannelResolver } from './youtube-channel-resolver';
@@ -38,6 +39,7 @@ import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } fr
     OpportunityDetectionService,
     SemanticTopicClusteringService,
     OpportunityService,
+    OpportunityEvidenceService,
     ResearchPackageService,
     TopicSelectionService,
     YouTubeChannelResolver,

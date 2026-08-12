@@ -121,6 +121,52 @@ describe('EditorialAssessmentService', () => {
     expect(JSON.stringify(currentPackage)).toBe(packageBefore);
   });
 
+  it('keeps candidate-specific fact claims distinct from parent Signal provenance in evaluator input', async () => {
+    packages.findFactsWithEvidenceByPackageIds.mockResolvedValueOnce(
+      new Map([
+        [
+          'package-1',
+          [
+            {
+              id: 'fact-fcas',
+              claim: 'India-France FCAS sixth-generation fighter programme',
+              status: 'supported',
+              signalId: 'signal-1',
+              signalTitle:
+                'Japan F-2 Fighter Jet | India-France FCAS | IAF Honey Trap',
+              sourceName: 'Channel one',
+            },
+          ],
+        ],
+      ]),
+    );
+    evaluator.assess.mockResolvedValueOnce({
+      ...evaluation,
+      citedFactIds: ['fact-fcas'],
+    });
+
+    await service.assess('opportunity-1');
+
+    expect(evaluator.assess).toHaveBeenCalledWith(
+      expect.objectContaining({
+        researchPackage: expect.objectContaining({
+          facts: [
+            expect.objectContaining({
+              claim: 'India-France FCAS sixth-generation fighter programme',
+            }),
+          ],
+          signals: [
+            expect.objectContaining({
+              title:
+                'Japan F-2 Fighter Jet | India-France FCAS | IAF Honey Trap',
+            }),
+          ],
+        }),
+      }),
+      'project-1',
+    );
+  });
+
   it('rejects invented citations and records a controlled evaluator failure', async () => {
     evaluator.assess.mockResolvedValueOnce({ ...evaluation, citedFactIds: ['invented'] });
     await expect(service.assess('opportunity-1')).rejects.toBeInstanceOf(ServiceUnavailableException);

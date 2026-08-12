@@ -34,6 +34,14 @@ export type ResearchFactWithEvidence = typeof researchFacts.$inferSelect & {
   sourceName: string | null;
 };
 
+export type ResearchFactReplacement = {
+  claim: string;
+  normalizedClaimKey: string;
+  confidence: number;
+  status: string;
+  signalIds: string[];
+};
+
 export class ResearchPackageRepository {
   async findAll(projectId?: string): Promise<ResearchPackageWithContext[]> {
     const query = db
@@ -158,6 +166,62 @@ export class ResearchPackageRepository {
       .onConflictDoNothing()
       .returning({ researchFactId: researchFactEvidence.researchFactId });
     return rows.length > 0;
+  }
+
+  /**
+   * Candidate-backed package generation is a complete semantic rebuild. This
+   * replaces its generated facts/evidence atomically so stale legacy or
+   * sibling-candidate evidence cannot remain in the package.
+   */
+  async replaceFactsWithEvidence(
+    researchPackageId: string,
+    replacements: ResearchFactReplacement[],
+  ): Promise<{ previousFactCount: number }> {
+    const now = new Date().toISOString();
+    return db.transaction((tx) => {
+      const existingFacts = tx
+        .select({ id: researchFacts.id })
+        .from(researchFacts)
+        .where(eq(researchFacts.researchPackageId, researchPackageId))
+        .all();
+      const factIds = existingFacts.map((fact) => fact.id);
+      if (factIds.length > 0) {
+        tx.delete(researchFactEvidence)
+          .where(inArray(researchFactEvidence.researchFactId, factIds))
+          .run();
+      }
+      tx.delete(researchFacts)
+        .where(eq(researchFacts.researchPackageId, researchPackageId))
+        .run();
+
+      for (const replacement of replacements) {
+        const factId = randomUUID();
+        tx.insert(researchFacts)
+          .values({
+            id: factId,
+            researchPackageId,
+            claim: replacement.claim,
+            normalizedClaimKey: replacement.normalizedClaimKey,
+            confidence: replacement.confidence,
+            status: replacement.status,
+            createdAt: now,
+          })
+          .run();
+        const signalIds = [...new Set(replacement.signalIds)];
+        if (signalIds.length > 0) {
+          tx.insert(researchFactEvidence)
+            .values(
+              signalIds.map((signalId) => ({
+                researchFactId: factId,
+                signalId,
+                createdAt: now,
+              })),
+            )
+            .run();
+        }
+      }
+      return { previousFactCount: existingFacts.length };
+    });
   }
 
   async findFactsWithEvidenceByPackageIds(

@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import type {
@@ -24,12 +25,20 @@ import {
   scoreResearchConfidence,
   summarizeResearchPackage,
 } from './research-package';
+import {
+  OpportunityEvidenceResolutionError,
+  OpportunityEvidenceService,
+  type ResolvedOpportunityEvidence,
+} from './opportunity-evidence.service';
 
 @Injectable()
 export class ResearchPackageService {
+  private readonly logger = new Logger(ResearchPackageService.name);
+
   constructor(
     private readonly opportunities: OpportunityRepository,
     private readonly packages: ResearchPackageRepository,
+    private readonly evidence: OpportunityEvidenceService,
   ) {}
 
   async generate(
@@ -38,10 +47,25 @@ export class ResearchPackageService {
     const opportunity = await this.opportunities.findById(opportunityId);
     if (!opportunity) throw new NotFoundException('Opportunity not found');
 
-    const signals =
-      (
-        await this.opportunities.findSignalsByOpportunityIds([opportunityId])
-      ).get(opportunityId) ?? [];
+    let resolvedEvidence: ResolvedOpportunityEvidence;
+    try {
+      resolvedEvidence = await this.evidence.resolveOpportunityEvidence(
+        opportunityId,
+      );
+    } catch (error) {
+      if (error instanceof OpportunityEvidenceResolutionError) {
+        this.logger.warn(
+          JSON.stringify({
+            stage: 'research_package.evidence_resolution_failed',
+            opportunityId,
+            category: error.category,
+          }),
+        );
+        throw new ConflictException('Opportunity evidence is unavailable');
+      }
+      throw error;
+    }
+    const signals = resolvedEvidence.signals;
     if (!signals.length)
       throw new ConflictException('Opportunity has no supporting signals');
 
@@ -77,23 +101,60 @@ export class ResearchPackageService {
       });
     }
 
-    const factResult = await this.packages.upsertFact({
-      researchPackageId: researchPackage.id,
-      claim: opportunity.title,
-      normalizedClaimKey: normalizeClaimKey(opportunity.title),
-      confidence: confidenceScore,
-      status: factStatusForSources(sourceCount),
-    });
-
-    for (const signal of signals)
-      await this.packages.attachEvidence(factResult.fact.id, signal.id);
+    let factsCreated = 0;
+    let factsUpdated = 0;
+    if (resolvedEvidence.kind === 'candidate') {
+      const facts = new Map<
+        string,
+        { claim: string; normalizedClaimKey: string; signalIds: string[] }
+      >();
+      for (const candidate of resolvedEvidence.candidates) {
+        const normalizedClaimKey = normalizeClaimKey(candidate.candidateText);
+        const existing = facts.get(normalizedClaimKey);
+        if (existing) {
+          existing.signalIds.push(candidate.signal.id);
+        } else {
+          facts.set(normalizedClaimKey, {
+            claim: candidate.candidateText,
+            normalizedClaimKey,
+            signalIds: [candidate.signal.id],
+          });
+        }
+      }
+      const replacement = await this.packages.replaceFactsWithEvidence(
+        researchPackage.id,
+        [...facts.values()].map((fact) => ({
+          ...fact,
+          confidence: confidenceScore,
+          status: factStatusForSources(sourceCount),
+        })),
+      );
+      if (replacement.previousFactCount > 0) factsUpdated = facts.size;
+      else factsCreated = facts.size;
+    } else {
+      const fact = {
+        claim: opportunity.title,
+        signalIds: signals.map((signal) => signal.id),
+      };
+      const factResult = await this.packages.upsertFact({
+        researchPackageId: researchPackage.id,
+        claim: fact.claim,
+        normalizedClaimKey: normalizeClaimKey(fact.claim),
+        confidence: confidenceScore,
+        status: factStatusForSources(sourceCount),
+      });
+      if (factResult.created) factsCreated += 1;
+      else factsUpdated += 1;
+      for (const signalId of fact.signalIds)
+        await this.packages.attachEvidence(factResult.fact.id, signalId);
+    }
 
     return {
       packageId: researchPackage.id,
       signalsProcessed: signals.length,
       sourcesUsed: sourceCount,
-      factsCreated: factResult.created ? 1 : 0,
-      factsUpdated: factResult.created ? 0 : 1,
+      factsCreated,
+      factsUpdated,
       confidenceScore,
       warnings:
         sourceCount < 2

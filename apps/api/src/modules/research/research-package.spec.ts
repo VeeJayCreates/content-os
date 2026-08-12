@@ -61,12 +61,14 @@ describe('ResearchPackageService', () => {
     findById: jest.fn(),
     findSignalsByOpportunityIds: jest.fn(),
   };
+  const evidence = { resolveOpportunityEvidence: jest.fn() };
   const packages = {
     findByOpportunityId: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
     upsertFact: jest.fn(),
     attachEvidence: jest.fn(),
+    replaceFactsWithEvidence: jest.fn(),
     findById: jest.fn(),
     findFactsWithEvidenceByPackageIds: jest.fn(),
     findAll: jest.fn(),
@@ -74,6 +76,7 @@ describe('ResearchPackageService', () => {
   const service = new ResearchPackageService(
     opportunities as never,
     packages as never,
+    evidence as never,
   );
 
   beforeEach(() => jest.resetAllMocks());
@@ -84,7 +87,11 @@ describe('ResearchPackageService', () => {
       NotFoundException,
     );
     opportunities.findById.mockResolvedValueOnce(opportunity);
-    opportunities.findSignalsByOpportunityIds.mockResolvedValueOnce(new Map());
+    evidence.resolveOpportunityEvidence.mockResolvedValueOnce({
+      kind: 'legacy',
+      candidates: [],
+      signals: [],
+    });
     await expect(service.generate(opportunity.id)).rejects.toBeInstanceOf(
       ConflictException,
     );
@@ -107,9 +114,11 @@ describe('ResearchPackageService', () => {
       updatedAt: opportunity.updatedAt,
     };
     opportunities.findById.mockResolvedValue(opportunity);
-    opportunities.findSignalsByOpportunityIds.mockResolvedValue(
-      new Map([[opportunity.id, signals]]),
-    );
+    evidence.resolveOpportunityEvidence.mockResolvedValue({
+      kind: 'legacy',
+      candidates: [],
+      signals,
+    });
     packages.findByOpportunityId
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(researchPackage);
@@ -153,6 +162,70 @@ describe('ResearchPackageService', () => {
     expect(single).toBeGreaterThanOrEqual(0);
     expect(multiple).toBeLessThanOrEqual(100);
     expect(multiple).toBeGreaterThan(single);
+  });
+
+  it('uses candidate text as the fact claim and does not attach sibling candidates', async () => {
+    const researchPackage = {
+      id: 'package-1', projectId: opportunity.projectId, opportunityId: opportunity.id,
+      projectName: opportunity.projectName, opportunityTitle: opportunity.title,
+      title: opportunity.title, summary: opportunity.summary, status: 'ready', confidenceScore: 85,
+      sourceCount: 1, signalCount: 1, createdAt: opportunity.createdAt, updatedAt: opportunity.updatedAt,
+    };
+    const multiStorySignal = signals[0]!;
+    opportunities.findById.mockResolvedValue(opportunity);
+    evidence.resolveOpportunityEvidence.mockResolvedValue({
+      kind: 'candidate',
+      candidates: [{ candidateId: 'candidate-fcas', candidateText: 'India-France FCAS sixth-generation fighter programme', signal: multiStorySignal }],
+      signals: [multiStorySignal],
+    });
+    packages.findByOpportunityId.mockResolvedValue(undefined);
+    packages.create.mockResolvedValue(researchPackage);
+    packages.replaceFactsWithEvidence.mockResolvedValue({ previousFactCount: 0 });
+
+    const result = await service.generate(opportunity.id);
+
+    expect(packages.replaceFactsWithEvidence).toHaveBeenCalledWith(
+      researchPackage.id,
+      [expect.objectContaining({
+        claim: 'India-France FCAS sixth-generation fighter programme',
+        signalIds: [multiStorySignal.id],
+      })],
+    );
+    expect(packages.attachEvidence).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ signalsProcessed: 1, sourcesUsed: 1, factsCreated: 1 });
+  });
+
+  it('counts distinct parent Signals and configured Sources for candidate evidence', async () => {
+    const researchPackage = {
+      id: 'package-1', projectId: opportunity.projectId, opportunityId: opportunity.id,
+      projectName: opportunity.projectName, opportunityTitle: opportunity.title,
+      title: opportunity.title, summary: opportunity.summary, status: 'ready', confidenceScore: 85,
+      sourceCount: 1, signalCount: 2, createdAt: opportunity.createdAt, updatedAt: opportunity.updatedAt,
+    };
+    const sameSourceSignal = { ...signals[1]!, researchSourceId: signals[0]!.researchSourceId };
+    opportunities.findById.mockResolvedValue(opportunity);
+    evidence.resolveOpportunityEvidence.mockResolvedValue({
+      kind: 'candidate',
+      candidates: [
+        { candidateId: 'candidate-1', candidateText: 'FCAS update one', signal: signals[0]! },
+        { candidateId: 'candidate-2', candidateText: 'FCAS update two', signal: sameSourceSignal },
+      ],
+      signals: [signals[0]!, sameSourceSignal],
+    });
+    packages.findByOpportunityId.mockResolvedValue(undefined);
+    packages.create.mockResolvedValue(researchPackage);
+    packages.replaceFactsWithEvidence.mockResolvedValue({ previousFactCount: 0 });
+
+    const result = await service.generate(opportunity.id);
+
+    expect(result).toMatchObject({ signalsProcessed: 2, sourcesUsed: 1, factsCreated: 2 });
+    expect(packages.replaceFactsWithEvidence).toHaveBeenCalledWith(
+      researchPackage.id,
+      expect.arrayContaining([
+        expect.objectContaining({ signalIds: [signals[0]!.id] }),
+        expect.objectContaining({ signalIds: [sameSourceSignal.id] }),
+      ]),
+    );
   });
 
   it('reads facts and evidence through one batched package query', async () => {
