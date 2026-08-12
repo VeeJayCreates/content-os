@@ -95,3 +95,6 @@ export enum ContentAngleType { BREAKING = 'breaking', EXPLAINER = 'explainer', F
 export enum AiTask { CONTENT_ANGLE = 'content_angle', SEMANTIC_EMBEDDING = 'semantic_embedding', SEMANTIC_RERANKING = 'semantic_reranking' }
 export enum AiCapability { STRUCTURED_GENERATION = 'structured_generation', TEXT_GENERATION = 'text_generation', EMBEDDING = 'embedding', RERANKING = 'reranking', CLASSIFICATION = 'classification' }
 export enum AiExecutionStatus { SUCCEEDED = 'succeeded', FAILED = 'failed' }
+export enum AiExecutionMode { SYNCHRONOUS = 'synchronous', BATCH = 'batch' }
+export enum AiBatchStatus { QUEUED = 'queued', SUBMITTED = 'submitted', PROCESSING = 'processing', COMPLETED = 'completed', FAILED = 'failed', CANCELLED = 'cancelled', EXPIRED = 'expired' }
+export enum AiBatchItemStatus { QUEUED = 'queued', SUBMITTED = 'submitted', PROCESSING = 'processing', COMPLETED = 'completed', FAILED = 'failed', CANCELLED = 'cancelled', EXPIRED = 'expired' }

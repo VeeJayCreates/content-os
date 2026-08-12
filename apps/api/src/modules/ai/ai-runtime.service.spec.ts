@@ -41,6 +41,15 @@ describe('AiRuntime', () => {
     expect(calculator.estimate({ inputTokens: null, outputTokens: null, totalTokens: null, providerRequestId: null }, { version: 'unpriced-v1', currency: 'USD', inputMicrounitsPerMillionTokens: null, outputMicrounitsPerMillionTokens: null })).toBeNull();
   });
 
+  it('prices GPT-5.4 mini and nano for synchronous and batch execution while leaving unknown models unpriced', () => {
+    const calculator = new AiCostCalculator();
+    expect(calculator.pricing('gpt-5.4-mini')).toMatchObject({ inputMicrounitsPerMillionTokens: 750_000, outputMicrounitsPerMillionTokens: 4_500_000 });
+    expect(calculator.pricing('gpt-5.4-mini', 'batch')).toMatchObject({ inputMicrounitsPerMillionTokens: 375_000, outputMicrounitsPerMillionTokens: 2_250_000 });
+    expect(calculator.pricing('gpt-5.4-nano')).toMatchObject({ inputMicrounitsPerMillionTokens: 200_000, outputMicrounitsPerMillionTokens: 1_250_000 });
+    expect(calculator.pricing('gpt-5.4-nano', 'batch')).toMatchObject({ inputMicrounitsPerMillionTokens: 100_000, outputMicrounitsPerMillionTokens: 625_000 });
+    expect(calculator.pricing('unknown-model').version).toBe('unpriced-v1');
+  });
+
   it('uses task-aware configuration without a business-service model dependency', () => {
     const originalTaskModel = process.env.AI_CONTENT_ANGLE_MODEL;
     const originalDefaultModel = process.env.OPENAI_MODEL;

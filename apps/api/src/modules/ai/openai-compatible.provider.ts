@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { AiProviderRequest, AiProviderResponse, AiStructuredGenerationProvider, AiUsage } from './ai-runtime.types';
+import type { AiBatchProviderResult, AiBatchProviderStatus, AiBatchSubmitRequest, AiProviderRequest, AiProviderResponse, AiStructuredGenerationProvider, AiUsage } from './ai-runtime.types';
 import { AiRuntimeConfigurationError, AiRuntimeProviderError } from './ai-runtime.types';
+import { AiBatchStatus } from '@content-os/contracts';
 
 @Injectable()
 export class OpenAiCompatibleProvider implements AiStructuredGenerationProvider {
@@ -65,6 +66,30 @@ export class OpenAiCompatibleProvider implements AiStructuredGenerationProvider 
     }
   }
 
+  async submitBatch(request: AiBatchSubmitRequest): Promise<{ providerBatchId: string }> {
+    const { key, baseUrl } = this.configuration();
+    const lines = request.items.map((item) => JSON.stringify({ custom_id: item.customId, method: 'POST', url: '/v1/chat/completions', body: { model: request.model, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: item.systemPrompt }, { role: 'user', content: JSON.stringify(item.input) }] } })).join('\n');
+    const form = new FormData(); form.set('purpose', 'batch'); form.set('file', new Blob([lines], { type: 'application/jsonl' }), 'content-os-batch.jsonl');
+    const file = await this.fetchJson(`${baseUrl}/files`, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form });
+    const fileId = this.stringField(file, 'id'); if (!fileId) throw new AiRuntimeProviderError('Batch input file was not accepted', 'malformed_response');
+    const batch = await this.fetchJson(`${baseUrl}/batches`, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ input_file_id: fileId, endpoint: '/v1/chat/completions', completion_window: request.completionWindow }) });
+    const batchId = this.stringField(batch, 'id'); if (!batchId) throw new AiRuntimeProviderError('Batch submission returned no ID', 'malformed_response'); return { providerBatchId: batchId };
+  }
+
+  async getBatchStatus(providerBatchId: string): Promise<AiBatchProviderStatus> {
+    const { key, baseUrl } = this.configuration(); const body = await this.fetchJson(`${baseUrl}/batches/${encodeURIComponent(providerBatchId)}`, { headers: { Authorization: `Bearer ${key}` } });
+    return { providerBatchId, status: this.batchStatus(this.stringField(body, 'status')), outputFileId: this.stringField(body, 'output_file_id') ?? null, errorCategory: null, errorCode: null };
+  }
+
+  async getBatchResults(providerBatchId: string): Promise<AiBatchProviderResult[]> {
+    const status = await this.getBatchStatus(providerBatchId); if (status.status !== 'completed' || !status.outputFileId) return [];
+    const { key, baseUrl } = this.configuration(); const response = await fetch(`${baseUrl}/files/${encodeURIComponent(status.outputFileId)}/content`, { headers: { Authorization: `Bearer ${key}` } });
+    if (!response.ok) throw new AiRuntimeProviderError('Batch results could not be retrieved', 'provider_http', response.status);
+    const text = await response.text(); return text.split(/\r?\n/).filter(Boolean).map((line) => this.batchResult(line));
+  }
+
+  async cancelBatch(providerBatchId: string): Promise<AiBatchProviderStatus> { const { key, baseUrl } = this.configuration(); await this.fetchJson(`${baseUrl}/batches/${encodeURIComponent(providerBatchId)}/cancel`, { method: 'POST', headers: { Authorization: `Bearer ${key}` } }); return this.getBatchStatus(providerBatchId); }
+
   private usage(body: unknown, response: Response): AiUsage {
     const usage = body && typeof body === 'object' ? Reflect.get(body, 'usage') : undefined;
     return {
@@ -74,6 +99,10 @@ export class OpenAiCompatibleProvider implements AiStructuredGenerationProvider 
       providerRequestId: response.headers.get('x-request-id'),
     };
   }
+  private configuration() { const key = process.env.OPENAI_API_KEY; const baseUrl = process.env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1'; if (!key) throw new AiRuntimeConfigurationError('AI provider is not configured'); return { key, baseUrl }; }
+  private async fetchJson(url: string, init: RequestInit): Promise<unknown> { const response = await fetch(url, init); if (!response.ok) throw new AiRuntimeProviderError('AI provider batch request failed', 'provider_http', response.status); try { return await response.json(); } catch { throw new AiRuntimeProviderError('AI provider returned invalid JSON', 'malformed_response'); } }
+  private batchStatus(value: string | undefined): AiBatchProviderStatus['status'] { if (value === 'in_progress' || value === 'finalizing') return AiBatchStatus.PROCESSING; if (value === 'validating') return AiBatchStatus.SUBMITTED; if (value === 'completed') return AiBatchStatus.COMPLETED; if (value === 'failed') return AiBatchStatus.FAILED; if (value === 'cancelled') return AiBatchStatus.CANCELLED; if (value === 'expired') return AiBatchStatus.EXPIRED; return AiBatchStatus.QUEUED; }
+  private batchResult(line: string): AiBatchProviderResult { try { const row = JSON.parse(line) as { custom_id?: unknown; response?: { body?: unknown }; error?: { code?: unknown } }; const customId = typeof row.custom_id === 'string' ? row.custom_id : ''; const body = row.response?.body; const content = this.content(body); const usage = body && typeof body === 'object' ? { inputTokens: this.integerField(Reflect.get(body, 'usage'), 'prompt_tokens'), outputTokens: this.integerField(Reflect.get(body, 'usage'), 'completion_tokens'), totalTokens: this.integerField(Reflect.get(body, 'usage'), 'total_tokens'), providerRequestId: null } : { inputTokens: null, outputTokens: null, totalTokens: null, providerRequestId: null }; if (!customId || !content) return { customId, status: 'failed', errorCategory: 'malformed_response', errorCode: typeof row.error?.code === 'string' ? row.error.code : null, usage }; return { customId, status: 'completed', output: JSON.parse(content), usage }; } catch { return { customId: '', status: 'failed', errorCategory: 'malformed_response', errorCode: null, usage: { inputTokens: null, outputTokens: null, totalTokens: null, providerRequestId: null } }; } }
 
   private async httpFailure(response: Response) {
     let body: unknown;

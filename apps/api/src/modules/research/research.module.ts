@@ -19,6 +19,7 @@ import { ProductionQueueController } from './production-queue.controller';
 import { ProductionQueueService } from './production-queue.service';
 import { ProductionQueueContentAngleController } from './production-queue-content-angle.controller';
 import { ProductionQueueContentAngleService } from './production-queue-content-angle.service';
+import { ProductionQueueContentAngleBatchService } from './production-queue-content-angle-batch.service';
 import { TopicSelectionController } from './topic-selection.controller';
 import { TopicSelectionService } from './topic-selection.service';
 import { YouTubeChannelResolver } from './youtube-channel-resolver';
@@ -50,6 +51,7 @@ import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } fr
     ResearchExpansionService,
     ProductionQueueService,
     ProductionQueueContentAngleService,
+    ProductionQueueContentAngleBatchService,
     ResearchPackageService,
     TopicSelectionService,
     YouTubeChannelResolver,

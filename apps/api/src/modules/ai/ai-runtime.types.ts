@@ -1,4 +1,4 @@
-import type { AiCapability, AiTask } from '@content-os/contracts';
+import type { AiBatchStatus, AiCapability, AiExecutionMode, AiTask } from '@content-os/contracts';
 
 export type AiRoute = {
   task: AiTask;
@@ -23,6 +23,10 @@ export type AiStructuredGenerationRequest = {
   systemPrompt: string;
   input: object;
 };
+export type AiBatchItemRequest = AiStructuredGenerationRequest & { customId: string; entityType: string; entityId: string; promptHash: string };
+export type AiBatchSubmitRequest = { task: AiTask; model: string; items: readonly AiBatchItemRequest[]; completionWindow: '24h' };
+export type AiBatchProviderStatus = { providerBatchId: string; status: AiBatchStatus; outputFileId?: string | null; errorCategory?: string | null; errorCode?: string | null };
+export type AiBatchProviderResult = { customId: string; output?: unknown; status: 'completed' | 'failed'; errorCategory?: string | null; errorCode?: string | null; usage: AiUsage };
 
 export type AiProviderRequest = AiStructuredGenerationRequest & { route: AiRoute };
 export type AiProviderResponse = { output: unknown; usage: AiUsage };
@@ -56,6 +60,12 @@ export interface AiProviderBase {
 export interface AiStructuredGenerationProvider extends AiProviderBase {
   structuredGeneration(request: AiProviderRequest): Promise<AiProviderResponse>;
 }
+export interface AiBatchProvider extends AiProviderBase {
+  submitBatch(request: AiBatchSubmitRequest): Promise<{ providerBatchId: string }>;
+  getBatchStatus(providerBatchId: string): Promise<AiBatchProviderStatus>;
+  getBatchResults(providerBatchId: string): Promise<AiBatchProviderResult[]>;
+  cancelBatch?(providerBatchId: string): Promise<AiBatchProviderStatus>;
+}
 
 export interface AiEmbeddingProvider extends AiProviderBase {
   embed(request: AiEmbeddingRequest & { route: AiRoute }): Promise<AiEmbeddingResponse>;
@@ -65,7 +75,7 @@ export interface AiRerankingProvider extends AiProviderBase {
   rerank(request: AiRerankingRequest & { route: AiRoute }): Promise<AiRerankingResponse>;
 }
 
-export type AiProvider = AiStructuredGenerationProvider | AiEmbeddingProvider | AiRerankingProvider;
+export type AiProvider = AiStructuredGenerationProvider | AiEmbeddingProvider | AiRerankingProvider | AiBatchProvider;
 
 export type AiPricing = {
   version: string;

@@ -7,6 +7,7 @@ import type { EditorialAssessmentEvaluator } from './editorial-assessment.evalua
 import { evaluateResearchVerification } from './research-verification';
 
 type Output = { relevance: EditorialAssessmentBand; newsworthiness: EditorialAssessmentBand; contentPotential: EditorialAssessmentBand; longevity: EditorialAssessmentLongevity; duplicationRisk: EditorialAssessmentBand; recommendation: EditorialAssessmentRecommendation; rationale: string; citedFactIds: string[]; citedSignalIds: string[]; angleType: ContentAngleType; videoIdeaTitle: string; videoIdeaSummary: string; hook: string; whyNow: string };
+export type PreparedEditorialAssessment = { opportunity: NonNullable<Awaited<ReturnType<OpportunityRepository['findById']>>>; researchPackageId: string; input: Awaited<ReturnType<EditorialAssessmentService['inputFor']>>; inputHash: string; cached: EditorialAssessment | null };
 type OutputValidationReason = 'invalid_json_shape' | 'missing_required_field' | 'invalid_relevance' | 'invalid_newsworthiness' | 'invalid_content_potential' | 'invalid_longevity' | 'invalid_duplication_risk' | 'invalid_recommendation' | 'invalid_angle_type' | 'rationale_too_long' | 'unknown_fact_citation' | 'unknown_signal_citation' | 'missing_video_idea_title' | 'video_idea_title_too_long' | 'missing_video_idea_summary' | 'video_idea_summary_too_long' | 'hook_too_long' | 'why_now_too_long';
 class EditorialAssessmentOutputValidationError extends Error {}
 
@@ -65,29 +66,44 @@ export class EditorialAssessmentService {
     return this.assessWithResolvedPackage(opportunity, researchPackage);
   }
 
-  private async assessWithResolvedPackage(opportunity: NonNullable<Awaited<ReturnType<OpportunityRepository['findById']>>>, researchPackage: Awaited<ReturnType<ResearchPackageRepository['findByOpportunityId']>>): Promise<EditorialAssessment> {
-    const opportunityId = opportunity.id;
+  async prepareWithPackage(opportunity: NonNullable<Awaited<ReturnType<OpportunityRepository['findById']>>>, researchPackageId: string): Promise<PreparedEditorialAssessment> {
+    const researchPackage = await this.packages.findById(researchPackageId);
+    return this.prepareWithResolvedPackage(opportunity, researchPackage, true);
+  }
+
+  private async prepareWithResolvedPackage(opportunity: NonNullable<Awaited<ReturnType<OpportunityRepository['findById']>>>, researchPackage: Awaited<ReturnType<ResearchPackageRepository['findByOpportunityId']>>, requireIdentityMatch = false): Promise<PreparedEditorialAssessment> {
     const [profile, metric] = await Promise.all([
       this.profiles.getOrCreateDefault(opportunity.projectId),
-      this.metrics.findByOpportunityId(opportunityId, OPPORTUNITY_METRICS_V2_VERSION),
+      this.metrics.findByOpportunityId(opportunity.id, OPPORTUNITY_METRICS_V2_VERSION),
     ]);
     if (!metric) throw new ConflictException('Opportunity Metrics V2 are required before editorial assessment');
-    if (!researchPackage || researchPackage.status !== 'ready') throw new ConflictException('A ready Research Package is required before editorial assessment');
+    if (!researchPackage || researchPackage.status !== 'ready' || (requireIdentityMatch && (researchPackage.projectId !== opportunity.projectId || researchPackage.opportunityId !== opportunity.id))) throw new ConflictException('A ready Research Package is required before editorial assessment');
     const input = await this.inputFor(opportunity, profile, metric, researchPackage);
     const inputHash = this.hash(input);
-    const cached = await this.assessments.find(opportunity.projectId, opportunityId);
-    if (cached?.status === EditorialAssessmentStatus.READY && cached.inputHash === inputHash && cached.angleType && cached.videoIdeaTitle && cached.videoIdeaSummary && cached.hook && cached.whyNow) return this.toContract(cached);
-    const base = { projectId: opportunity.projectId, opportunityId, projectEditorialProfileRevision: profile.revision, opportunityMetricsVersion: metric.scoreVersion, researchPackageId: researchPackage.id, researchPackageUpdatedAt: researchPackage.updatedAt, promptVersion: EDITORIAL_ASSESSMENT_PROMPT_VERSION, inputHash };
+    const cached = await this.assessments.find(opportunity.projectId, opportunity.id);
+    return { opportunity, researchPackageId: researchPackage.id, input, inputHash, cached: cached?.status === EditorialAssessmentStatus.READY && cached.inputHash === inputHash && cached.angleType && cached.videoIdeaTitle && cached.videoIdeaSummary && cached.hook && cached.whyNow ? this.toContract(cached) : null };
+  }
+
+  async persistPreparedAssessment(prepared: PreparedEditorialAssessment, value: unknown): Promise<EditorialAssessment> {
+    const { opportunity, researchPackageId, input, inputHash } = prepared;
+    const output = this.validate(value, new Set(input.researchPackage.facts.map((fact) => fact.id)), new Set(input.researchPackage.signals.map((signal) => signal.id)), opportunity.id);
+    const profile = await this.profiles.getOrCreateDefault(opportunity.projectId);
+    const metric = await this.metrics.findByOpportunityId(opportunity.id, OPPORTUNITY_METRICS_V2_VERSION);
+    if (!metric) throw new ConflictException('Opportunity Metrics V2 are required before editorial assessment');
+    return this.toContract(await this.assessments.upsert({ projectId: opportunity.projectId, opportunityId: opportunity.id, projectEditorialProfileRevision: profile.revision, opportunityMetricsVersion: metric.scoreVersion, researchPackageId, researchPackageUpdatedAt: input.researchPackage.updatedAt, promptVersion: EDITORIAL_ASSESSMENT_PROMPT_VERSION, inputHash, status: EditorialAssessmentStatus.READY, ...output, editorialScore: score(output), evaluatorProvider: this.evaluator.provider, evaluatorModel: this.evaluator.model, errorCode: null, failureReason: null, assessedAt: new Date().toISOString() }));
+  }
+
+  private async assessWithResolvedPackage(opportunity: NonNullable<Awaited<ReturnType<OpportunityRepository['findById']>>>, researchPackage: Awaited<ReturnType<ResearchPackageRepository['findByOpportunityId']>>): Promise<EditorialAssessment> {
+    if (!researchPackage) throw new ConflictException('A ready Research Package is required before editorial assessment');
+    const prepared = await this.prepareWithResolvedPackage(opportunity, researchPackage);
+    if (prepared.cached) return prepared.cached;
     try {
-      const facts = input.researchPackage.facts;
-      const signals = input.researchPackage.signals;
-      const output = this.validate(await this.evaluator.assess(input, opportunity.projectId), new Set(facts.map((fact) => fact.id)), new Set(signals.map((signal) => signal.id)), opportunityId);
-      return this.toContract(await this.assessments.upsert({ ...base, status: EditorialAssessmentStatus.READY, ...output, editorialScore: score(output), evaluatorProvider: this.evaluator.provider, evaluatorModel: this.evaluator.model, errorCode: null, failureReason: null, assessedAt: new Date().toISOString() }));
+      return await this.persistPreparedAssessment(prepared, await this.evaluator.assess(prepared.input, opportunity.projectId));
     } catch (error) {
-      this.logger.warn(JSON.stringify({ stage: 'editorial_assessment.service_catch', opportunityId, category: this.errorCategory(error) }));
+      this.logger.warn(JSON.stringify({ stage: 'editorial_assessment.service_catch', opportunityId: opportunity.id, category: this.errorCategory(error) }));
       const configured = !(error instanceof EditorialEvaluatorNotConfiguredError);
       try {
-        await this.assessments.upsert({ ...base, status: EditorialAssessmentStatus.FAILED, relevance: null, newsworthiness: null, contentPotential: null, longevity: null, duplicationRisk: null, recommendation: null, editorialScore: null, rationale: null, citedFactIds: [], citedSignalIds: [], angleType: null, videoIdeaTitle: null, videoIdeaSummary: null, hook: null, whyNow: null, evaluatorProvider: this.evaluator.provider, evaluatorModel: this.evaluator.model, errorCode: configured ? 'provider_failure' : 'not_configured', failureReason: configured ? 'Editorial evaluator request failed' : 'Editorial evaluator is not configured', assessedAt: null });
+        await this.assessments.upsert({ projectId: opportunity.projectId, opportunityId: opportunity.id, projectEditorialProfileRevision: (await this.profiles.getOrCreateDefault(opportunity.projectId)).revision, opportunityMetricsVersion: OPPORTUNITY_METRICS_V2_VERSION, researchPackageId: prepared.researchPackageId, researchPackageUpdatedAt: prepared.input.researchPackage.updatedAt, promptVersion: EDITORIAL_ASSESSMENT_PROMPT_VERSION, inputHash: prepared.inputHash, status: EditorialAssessmentStatus.FAILED, relevance: null, newsworthiness: null, contentPotential: null, longevity: null, duplicationRisk: null, recommendation: null, editorialScore: null, rationale: null, citedFactIds: [], citedSignalIds: [], angleType: null, videoIdeaTitle: null, videoIdeaSummary: null, hook: null, whyNow: null, evaluatorProvider: this.evaluator.provider, evaluatorModel: this.evaluator.model, errorCode: configured ? 'provider_failure' : 'not_configured', failureReason: configured ? 'Editorial evaluator request failed' : 'Editorial evaluator is not configured', assessedAt: null });
       } catch {
         throw new InternalServerErrorException('Unable to persist editorial assessment');
       }

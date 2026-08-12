@@ -8,7 +8,7 @@ import { evaluateResearchVerification } from './research-verification';
 export class ProductionQueueContentAngleService {
   constructor(private readonly queue: ProductionQueueRepository, private readonly projects: ProjectRepository, private readonly opportunities: OpportunityRepository, private readonly packages: ResearchPackageRepository, private readonly candidates: TopicCandidateRepository, private readonly editorial: EditorialAssessmentService) {}
   async generate(queueItemId: string): Promise<EditorialAssessment> {
-    const context = await this.context(queueItemId, true);
+    const context = await this.resolveEligibleContext(queueItemId);
     await this.queue.updateStatus(queueItemId, ProductionQueueStatus.PROCESSING);
     try { return await this.editorial.assessWithPackage(context.opportunity, context.item.researchPackageId); }
     catch (error) { await this.queue.updateStatus(queueItemId, ProductionQueueStatus.FAILED); throw error; }
@@ -17,6 +17,8 @@ export class ProductionQueueContentAngleService {
     const context = await this.context(queueItemId, false);
     return this.editorial.findOneWithPackage(context.opportunity, context.item.researchPackageId);
   }
+
+  async resolveEligibleContext(queueItemId: string) { return this.context(queueItemId, true); }
 
   private async context(queueItemId: string, requireEligible: boolean) {
     const item = await this.queue.findById(queueItemId); if (!item) throw new NotFoundException('Production queue item not found');

@@ -73,7 +73,7 @@ export class AiRuntime {
     usage: AiUsage;
     failure?: unknown;
   }) {
-    const pricing = this.costs.pricing();
+    const pricing = this.costs.pricing(args.route.model ?? undefined, 'synchronous');
     const failure = args.failure instanceof AiRuntimeProviderError ? args.failure : undefined;
     await this.executions.create({
       projectId: args.request.projectId,
