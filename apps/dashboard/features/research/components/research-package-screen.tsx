@@ -112,6 +112,15 @@ export function ResearchPackageScreen({ packageId }: { packageId: string }) {
             <Badge variant="success">
               Research Confidence {researchPackage.confidenceScore}
             </Badge>
+          <Badge
+            variant={
+              researchPackage.verification.canProceedAutomatically
+                ? "success"
+                : "muted"
+            }
+          >
+            Verification {researchPackage.verification.verificationStatus}
+          </Badge>
           <Badge>{researchPackage.status}</Badge>
         </div>
       </div>
@@ -126,6 +135,42 @@ export function ResearchPackageScreen({ packageId }: { packageId: string }) {
           value={formatResearchDate(researchPackage.updatedAt)}
         />
       </div>
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Evidence verification</CardTitle>
+          <CardDescription>
+            Evidence quality is based on relevant stored signals and distinct
+            configured sources. It does not claim proven editorial independence.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-3">
+          <Metric
+            label="Evidence signals"
+            value={researchPackage.verification.evidenceSignalCount}
+          />
+          <Metric
+            label="Configured sources"
+            value={researchPackage.verification.independentSourceCount}
+          />
+          <Metric
+            label="Automatic progression"
+            value={
+              researchPackage.verification.canProceedAutomatically
+                ? "Eligible"
+                : "More research needed"
+            }
+          />
+          <div className="sm:col-span-3">
+            <ul className="grid gap-1 text-sm text-muted-foreground">
+              {researchPackage.verification.verificationReasons.map(
+                (reason) => (
+                  <li key={reason}>{reason}</li>
+                ),
+              )}
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
       <EditorialAssessmentPanel opportunityId={researchPackage.opportunityId} />
       <Card className="mt-6">
         <CardHeader>

@@ -66,6 +66,14 @@ export enum ResearchFactStatus {
   UNVERIFIED = "unverified",
 }
 
+export enum ResearchVerificationStatus {
+  INSUFFICIENT = 'insufficient',
+  SINGLE_SOURCE = 'single_source',
+  CORROBORATED = 'corroborated',
+  CONFLICTING = 'conflicting',
+  REVIEW_REQUIRED = 'review_required',
+}
+
 export enum TopicSelectionDecision {
   SELECTED = "selected",
   HOLD = "hold",

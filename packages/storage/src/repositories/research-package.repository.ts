@@ -26,6 +26,7 @@ export type ResearchPackageWithContext =
 
 export type ResearchFactWithEvidence = typeof researchFacts.$inferSelect & {
   signalId: string | null;
+  researchSourceId: string | null;
   signalTitle: string | null;
   signalUrl: string | null;
   signalSummary: string | null;
@@ -233,6 +234,7 @@ export class ResearchPackageRepository {
       .select({
         fact: researchFacts,
         signalId: signals.id,
+        researchSourceId: signals.researchSourceId,
         signalTitle: signals.title,
         signalUrl: signals.url,
         signalSummary: signals.summary,
@@ -257,6 +259,7 @@ export class ResearchPackageRepository {
         {
           ...row.fact,
           signalId: row.signalId,
+          researchSourceId: row.researchSourceId,
           signalTitle: row.signalTitle,
           signalUrl: row.signalUrl,
           signalSummary: row.signalSummary,

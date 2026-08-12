@@ -1,5 +1,9 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 
+jest.mock('@content-os/contracts', () => ({
+  ResearchFactStatus: { SUPPORTED: 'supported', CONFLICTING: 'conflicting', UNVERIFIED: 'unverified' },
+  ResearchVerificationStatus: { INSUFFICIENT: 'insufficient', SINGLE_SOURCE: 'single_source', CORROBORATED: 'corroborated', CONFLICTING: 'conflicting', REVIEW_REQUIRED: 'review_required' },
+}));
 jest.mock('@content-os/storage', () => ({
   OpportunityRepository: class OpportunityRepository {},
   ResearchPackageRepository: class ResearchPackageRepository {},
@@ -7,6 +11,7 @@ jest.mock('@content-os/storage', () => ({
 
 import { scoreResearchConfidence } from './research-package';
 import { ResearchPackageService } from './research-package.service';
+import { ResearchVerificationStatus } from '@content-os/contracts';
 
 const opportunity = {
   id: 'opportunity-1',
@@ -260,6 +265,7 @@ describe('ResearchPackageService', () => {
               status: 'supported',
               createdAt: opportunity.createdAt,
               signalId: signals[0]?.id,
+              researchSourceId: signals[0]?.researchSourceId,
               signalTitle: signals[0]?.title,
               signalUrl: signals[0]?.url,
               signalSummary: signals[0]?.summary,
@@ -279,5 +285,37 @@ describe('ResearchPackageService', () => {
     ]);
     expect(detail.facts[0]?.evidence).toHaveLength(1);
     expect(detail.signals).toHaveLength(1);
+    expect(detail.verification).toMatchObject({
+      verificationStatus: ResearchVerificationStatus.SINGLE_SOURCE,
+      evidenceSignalCount: 1,
+      canProceedAutomatically: false,
+    });
+  });
+
+  it('does not let unrelated legacy links inflate candidate-backed verification', async () => {
+    const researchPackage = {
+      id: 'package-1', projectId: opportunity.projectId, opportunityId: opportunity.id,
+      projectName: opportunity.projectName, opportunityTitle: opportunity.title,
+      title: opportunity.title, summary: opportunity.summary, status: 'ready', confidenceScore: 60,
+      sourceCount: 1, signalCount: 1, createdAt: opportunity.createdAt, updatedAt: opportunity.updatedAt,
+    };
+    opportunities.findById.mockResolvedValue(opportunity);
+    evidence.resolveOpportunityEvidence.mockResolvedValue({
+      kind: 'candidate',
+      candidates: [{ candidateId: 'candidate-fcas', candidateText: 'India-France FCAS', signal: signals[0]! }],
+      signals: [signals[0]!],
+    });
+    packages.findByOpportunityId.mockResolvedValue(undefined);
+    packages.create.mockResolvedValue(researchPackage);
+    packages.replaceFactsWithEvidence.mockResolvedValue({ previousFactCount: 0 });
+
+    const result = await service.generate(opportunity.id);
+
+    expect(result.verification).toMatchObject({
+      verificationStatus: ResearchVerificationStatus.SINGLE_SOURCE,
+      evidenceSignalCount: 1,
+      candidateClaimCount: 1,
+    });
+    expect(opportunities.findSignalsByOpportunityIds).not.toHaveBeenCalled();
   });
 });

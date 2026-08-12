@@ -1,5 +1,7 @@
 jest.mock('@content-os/contracts', () => ({
   OPPORTUNITY_METRICS_V2_VERSION: 'opportunity-metrics-v2',
+  ResearchFactStatus: { SUPPORTED: 'supported', CONFLICTING: 'conflicting', UNVERIFIED: 'unverified' },
+  ResearchVerificationStatus: { INSUFFICIENT: 'insufficient', SINGLE_SOURCE: 'single_source', CORROBORATED: 'corroborated', CONFLICTING: 'conflicting', REVIEW_REQUIRED: 'review_required' },
   EditorialAssessmentStatus: { READY: 'ready', FAILED: 'failed', STALE: 'stale' },
   EditorialAssessmentBand: { LOW: 'low', MEDIUM: 'medium', HIGH: 'high' },
   EditorialAssessmentLongevity: { BREAKING: 'breaking', TIMELY: 'timely', EVERGREEN: 'evergreen' },
@@ -47,7 +49,7 @@ describe('EditorialAssessmentService', () => {
     profiles.getOrCreateDefault.mockImplementation(async () => currentProfile);
     metrics.findByOpportunityId.mockImplementation(async () => currentMetric);
     packages.findByOpportunityId.mockImplementation(async () => currentPackage);
-    packages.findFactsWithEvidenceByPackageIds.mockResolvedValue(new Map([['package-1', [{ id: 'fact-1', claim: 'Claim', status: 'supported', signalId: 'signal-1', signalTitle: 'Signal', sourceName: 'Source' }]]]));
+    packages.findFactsWithEvidenceByPackageIds.mockResolvedValue(new Map([['package-1', [{ id: 'fact-1', claim: 'Claim', status: 'supported', signalId: 'signal-1', researchSourceId: 'source-1', signalTitle: 'Signal', sourceName: 'Source' }]]]));
     assessments.find.mockImplementation(async () => stored);
     assessments.upsert.mockImplementation(async (value: Record<string, unknown>) => {
       stored = { id: 'assessment-1', ...value, createdAt: 'x', updatedAt: 'x' };
@@ -132,6 +134,7 @@ describe('EditorialAssessmentService', () => {
               claim: 'India-France FCAS sixth-generation fighter programme',
               status: 'supported',
               signalId: 'signal-1',
+              researchSourceId: 'source-1',
               signalTitle:
                 'Japan F-2 Fighter Jet | India-France FCAS | IAF Honey Trap',
               sourceName: 'Channel one',
@@ -161,6 +164,10 @@ describe('EditorialAssessmentService', () => {
                 'Japan F-2 Fighter Jet | India-France FCAS | IAF Honey Trap',
             }),
           ],
+          verification: expect.objectContaining({
+            verificationStatus: 'single_source',
+            canProceedAutomatically: false,
+          }),
         }),
       }),
       'project-1',

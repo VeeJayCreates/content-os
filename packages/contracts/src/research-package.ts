@@ -1,5 +1,9 @@
 import type { ResearchSourceProject } from "./research-source.js";
-import { ResearchFactStatus, ResearchPackageStatus } from "./enums.js";
+import {
+  ResearchFactStatus,
+  ResearchPackageStatus,
+  ResearchVerificationStatus,
+} from "./enums.js";
 
 export interface ResearchPackage {
   id: string;
@@ -19,12 +23,29 @@ export interface ResearchPackage {
 
 export interface ResearchEvidence {
   signalId: string;
+  researchSourceId: string;
   title: string;
   url: string;
   summary: string | null;
   sourceName: string;
   publishedAt: string | null;
   discoveredAt: string;
+}
+
+/**
+ * Evidence quality based on stored, topic-relevant evidence. An independent
+ * source is a distinct configured Research Source identity, not proof of
+ * editorial or journalistic independence.
+ */
+export interface ResearchVerification {
+  verificationStatus: ResearchVerificationStatus;
+  evidenceSignalCount: number;
+  distinctSourceCount: number;
+  independentSourceCount: number;
+  candidateClaimCount: number;
+  contradictionCount: number;
+  verificationReasons: string[];
+  canProceedAutomatically: boolean;
 }
 
 export interface ResearchFact {
@@ -39,6 +60,7 @@ export interface ResearchFact {
 export interface ResearchPackageDetail extends ResearchPackage {
   facts: ResearchFact[];
   signals: ResearchEvidence[];
+  verification: ResearchVerification;
 }
 
 export interface ResearchPackageGenerationResult {
@@ -48,5 +70,6 @@ export interface ResearchPackageGenerationResult {
   factsCreated: number;
   factsUpdated: number;
   confidenceScore: number;
+  verification: ResearchVerification;
   warnings: string[];
 }

@@ -11,6 +11,7 @@ import type {
   ResearchPackageDetail,
   ResearchPackageGenerationResult,
   ResearchPackageStatus,
+  ResearchVerification,
 } from '@content-os/contracts';
 import {
   OpportunityRepository,
@@ -30,6 +31,7 @@ import {
   OpportunityEvidenceService,
   type ResolvedOpportunityEvidence,
 } from './opportunity-evidence.service';
+import { evaluateResearchVerification } from './research-verification';
 
 @Injectable()
 export class ResearchPackageService {
@@ -72,6 +74,22 @@ export class ResearchPackageService {
     const sourceCount = new Set(
       signals.map((signal) => signal.researchSourceId),
     ).size;
+    const candidateClaimCount =
+      resolvedEvidence.kind === 'candidate'
+        ? new Set(
+            resolvedEvidence.candidates.map((candidate) =>
+              normalizeClaimKey(candidate.candidateText),
+            ),
+          ).size
+        : 1;
+    const verification = evaluateResearchVerification({
+      signals: signals.map((signal) => ({
+        signalId: signal.id,
+        researchSourceId: signal.researchSourceId,
+      })),
+      candidateClaimCount,
+      facts: [],
+    });
     const confidenceScore = scoreResearchConfidence(signals);
     const packageData = {
       title: opportunity.title,
@@ -156,6 +174,7 @@ export class ResearchPackageService {
       factsCreated,
       factsUpdated,
       confidenceScore,
+      verification,
       warnings:
         sourceCount < 2
           ? ['Only one independent source supports this package.']
@@ -177,9 +196,11 @@ export class ResearchPackageService {
     const rows =
       (await this.packages.findFactsWithEvidenceByPackageIds([id])).get(id) ??
       [];
+    const factsAndSignals = this.toFactsAndSignals(rows);
     return {
       ...this.toPackage(researchPackage),
-      ...this.toFactsAndSignals(rows),
+      ...factsAndSignals,
+      verification: this.verificationFor(factsAndSignals),
     };
   }
 
@@ -221,6 +242,7 @@ export class ResearchPackageService {
       }
       if (
         !row.signalId ||
+        !row.researchSourceId ||
         !row.signalTitle ||
         !row.signalUrl ||
         !row.sourceName ||
@@ -229,6 +251,7 @@ export class ResearchPackageService {
         continue;
       const evidence = {
         signalId: row.signalId,
+        researchSourceId: row.researchSourceId,
         title: row.signalTitle,
         url: row.signalUrl,
         summary: row.signalSummary,
@@ -240,5 +263,18 @@ export class ResearchPackageService {
       signals.set(evidence.signalId, evidence);
     }
     return { facts: [...facts.values()], signals: [...signals.values()] };
+  }
+
+  private verificationFor(
+    detail: Pick<ResearchPackageDetail, 'facts' | 'signals'>,
+  ): ResearchVerification {
+    return evaluateResearchVerification({
+      signals: detail.signals.map((signal) => ({
+        signalId: signal.signalId,
+        researchSourceId: signal.researchSourceId,
+      })),
+      candidateClaimCount: detail.facts.length,
+      facts: detail.facts,
+    });
   }
 }

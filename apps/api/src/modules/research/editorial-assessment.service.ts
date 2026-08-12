@@ -4,6 +4,7 @@ import { ContentAngleType, EditorialAssessment, EditorialAssessmentBand, Editori
 import { EditorialAssessmentRepository, OpportunityMetricRepository, OpportunityRepository, ProjectEditorialProfileRepository, ResearchPackageRepository } from '@content-os/storage';
 import { EDITORIAL_ASSESSMENT_EVALUATOR, EDITORIAL_ASSESSMENT_PROMPT_VERSION, EditorialEvaluatorNotConfiguredError, EditorialEvaluatorProviderError } from './editorial-assessment.evaluator';
 import type { EditorialAssessmentEvaluator } from './editorial-assessment.evaluator';
+import { evaluateResearchVerification } from './research-verification';
 
 type Output = { relevance: EditorialAssessmentBand; newsworthiness: EditorialAssessmentBand; contentPotential: EditorialAssessmentBand; longevity: EditorialAssessmentLongevity; duplicationRisk: EditorialAssessmentBand; recommendation: EditorialAssessmentRecommendation; rationale: string; citedFactIds: string[]; citedSignalIds: string[]; angleType: ContentAngleType; videoIdeaTitle: string; videoIdeaSummary: string; hook: string; whyNow: string };
 type OutputValidationReason = 'invalid_json_shape' | 'missing_required_field' | 'invalid_relevance' | 'invalid_newsworthiness' | 'invalid_content_potential' | 'invalid_longevity' | 'invalid_duplication_risk' | 'invalid_recommendation' | 'invalid_angle_type' | 'rationale_too_long' | 'unknown_fact_citation' | 'unknown_signal_citation' | 'missing_video_idea_title' | 'video_idea_title_too_long' | 'missing_video_idea_summary' | 'video_idea_summary_too_long' | 'hook_too_long' | 'why_now_too_long';
@@ -77,7 +78,14 @@ export class EditorialAssessmentService {
     const rows = (await this.packages.findFactsWithEvidenceByPackageIds([researchPackage.id])).get(researchPackage.id) ?? [];
     const facts = [...new Map(rows.map((row) => [row.id, { id: row.id, claim: row.claim, status: row.status, evidenceIds: rows.filter((candidate) => candidate.id === row.id && candidate.signalId).map((candidate) => candidate.signalId!) }])).values()];
     const signals = [...new Map(rows.filter((row) => row.signalId).map((row) => [row.signalId!, { id: row.signalId!, sourceName: row.sourceName, title: row.signalTitle }])).values()];
-    return { profile: { ...profile }, opportunity: { id: opportunity.id, title: opportunity.title, summary: opportunity.summary, url: opportunity.representativeUrl, status: opportunity.status }, metrics: { ...metric }, researchPackage: { id: researchPackage.id, updatedAt: researchPackage.updatedAt, summary: researchPackage.summary, confidenceScore: researchPackage.confidenceScore, sourceCount: researchPackage.sourceCount, signalCount: researchPackage.signalCount, facts, signals }, promptVersion: EDITORIAL_ASSESSMENT_PROMPT_VERSION };
+    const verification = evaluateResearchVerification({
+      signals: rows
+        .filter((row) => row.signalId && row.researchSourceId)
+        .map((row) => ({ signalId: row.signalId!, researchSourceId: row.researchSourceId! })),
+      candidateClaimCount: facts.length,
+      facts,
+    });
+    return { profile: { ...profile }, opportunity: { id: opportunity.id, title: opportunity.title, summary: opportunity.summary, url: opportunity.representativeUrl, status: opportunity.status }, metrics: { ...metric }, researchPackage: { id: researchPackage.id, updatedAt: researchPackage.updatedAt, summary: researchPackage.summary, confidenceScore: researchPackage.confidenceScore, sourceCount: researchPackage.sourceCount, signalCount: researchPackage.signalCount, facts, signals, verification }, promptVersion: EDITORIAL_ASSESSMENT_PROMPT_VERSION };
   }
 
   private hash(input: object) { return editorialAssessmentInputHash(input); }
