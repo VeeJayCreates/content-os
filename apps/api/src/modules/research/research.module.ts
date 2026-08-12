@@ -15,6 +15,8 @@ import { ResearchPackageController } from './research-package.controller';
 import { ResearchPackageService } from './research-package.service';
 import { OpportunityEvidenceService } from './opportunity-evidence.service';
 import { ResearchExpansionService } from './research-expansion.service';
+import { ProductionQueueController } from './production-queue.controller';
+import { ProductionQueueService } from './production-queue.service';
 import { TopicSelectionController } from './topic-selection.controller';
 import { TopicSelectionService } from './topic-selection.service';
 import { YouTubeChannelResolver } from './youtube-channel-resolver';
@@ -32,6 +34,7 @@ import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } fr
     ResearchPackageController,
     TopicSelectionController,
     EditorialAssessmentController,
+    ProductionQueueController,
   ],
   providers: [
     ResearchService,
@@ -42,6 +45,7 @@ import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } fr
     OpportunityService,
     OpportunityEvidenceService,
     ResearchExpansionService,
+    ProductionQueueService,
     ResearchPackageService,
     TopicSelectionService,
     YouTubeChannelResolver,

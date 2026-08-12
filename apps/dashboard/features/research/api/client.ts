@@ -16,6 +16,8 @@ import type {
   ProjectSelectionPolicy,
   EditorialAssessment,
   Signal,
+  ProductionQueueItem,
+  FillProductionQueueResult,
   UpdateResearchSourceInput,
 } from "@content-os/contracts";
 
@@ -153,3 +155,5 @@ export function evaluateTopicSelections(projectId?: string) { return requestUrl<
 export function getSelectionPolicy(projectId: string) { return requestUrl<ProjectSelectionPolicy>(`${apiEndpoint}/projects/${encodeURIComponent(projectId)}/selection-policy`); }
 export type SelectionPolicyUpdateInput = Pick<ProjectSelectionPolicy, "minimumOpportunityScore" | "minimumResearchConfidence" | "minimumIndependentSources" | "maxSelectedPerRun" | "requireResearchPackage" | "allowSingleSourceBreakingStories">;
 export function updateSelectionPolicy(projectId: string, policy: SelectionPolicyUpdateInput) { const payload: SelectionPolicyUpdateInput = { minimumOpportunityScore: policy.minimumOpportunityScore, minimumResearchConfidence: policy.minimumResearchConfidence, minimumIndependentSources: policy.minimumIndependentSources, maxSelectedPerRun: policy.maxSelectedPerRun, requireResearchPackage: policy.requireResearchPackage, allowSingleSourceBreakingStories: policy.allowSingleSourceBreakingStories }; return requestUrl<ProjectSelectionPolicy>(`${apiEndpoint}/projects/${encodeURIComponent(projectId)}/selection-policy`, { method: "PATCH", body: JSON.stringify(payload) }); }
+export function getProductionQueue(projectId: string) { return requestUrl<ProductionQueueItem[]>(`${apiEndpoint}/projects/${encodeURIComponent(projectId)}/production-queue`); }
+export function fillProductionQueue(projectId: string, targetCount: number) { return requestUrl<FillProductionQueueResult>(`${apiEndpoint}/projects/${encodeURIComponent(projectId)}/production-queue/fill`, { method: 'POST', body: JSON.stringify({ targetCount }) }); }

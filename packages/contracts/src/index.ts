@@ -8,6 +8,7 @@ export * from "./opportunity.js";
 export * from "./opportunity-metrics.js";
 export * from "./research-package.js";
 export * from "./topic-selection.js";
+export * from "./production-queue.js";
 export * from "./workflow.js";
 export * from "./job.js";
 export * from "./scene.js";

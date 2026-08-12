@@ -1,7 +1,5 @@
-import { Workflow } from "lucide-react";
-
-import { PageEmptyState } from "@/components/layout/page-empty-state";
+import { ProductionQueueScreen } from '@/features/research/components/production-queue-screen';
 
 export default function WorkflowsPage() {
-  return <PageEmptyState title="Workflows" description="Design repeatable processes that move content from idea to outcome." icon={Workflow} />;
+  return <ProductionQueueScreen />;
 }

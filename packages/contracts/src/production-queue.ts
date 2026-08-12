@@ -1,0 +1,3 @@
+import { ProductionQueueStatus, ResearchVerificationStatus } from './enums.js';
+export interface ProductionQueueItem { id: string; projectId: string; opportunityId: string; researchPackageId: string; title: string; verificationStatus: ResearchVerificationStatus; priority: number; selectionScore: number; selectionReason: string; status: ProductionQueueStatus; queuedAt: string; startedAt: string | null; completedAt: string | null; failedAt: string | null; createdAt: string; updatedAt: string; }
+export interface FillProductionQueueResult { requestedCount: number; queuedCount: number; skipped: Record<string, number>; items: ProductionQueueItem[]; }

@@ -1,0 +1,3 @@
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import { FillProductionQueueDto } from './fill-production-queue.dto';
+describe('FillProductionQueueDto', () => { const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }); const validate=(value:unknown)=>pipe.transform(value,{type:'body',metatype:FillProductionQueueDto}); it.each([1,50])('accepts targetCount %i',async value=>await expect(validate({targetCount:value})).resolves.toMatchObject({targetCount:value})); it.each([0,51,1.5,undefined])('rejects invalid targetCount %s',async value=>await expect(validate(value === undefined ? {} : {targetCount:value})).rejects.toBeInstanceOf(BadRequestException)); });

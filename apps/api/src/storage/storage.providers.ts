@@ -13,6 +13,7 @@ import {
   TopicCandidateRepository,
   SemanticEmbeddingCacheRepository,
   ResearchExpansionRepository,
+  ProductionQueueRepository,
 } from '@content-os/storage';
 
 export const storageProviders = [
@@ -54,4 +55,5 @@ export const storageProviders = [
   { provide: TopicCandidateRepository, useFactory: () => new TopicCandidateRepository() },
   { provide: SemanticEmbeddingCacheRepository, useFactory: () => new SemanticEmbeddingCacheRepository() },
   { provide: ResearchExpansionRepository, useFactory: () => new ResearchExpansionRepository() },
+  { provide: ProductionQueueRepository, useFactory: () => new ProductionQueueRepository() },
 ];

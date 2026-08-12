@@ -79,6 +79,7 @@ export enum TopicSelectionDecision {
   HOLD = "hold",
   REJECTED = "rejected",
 }
+export enum ProductionQueueStatus { QUEUED = 'queued', PROCESSING = 'processing', COMPLETED = 'completed', FAILED = 'failed', SKIPPED = 'skipped' }
 
 export enum EditorialTimelinessPreference {
   BREAKING = "breaking",

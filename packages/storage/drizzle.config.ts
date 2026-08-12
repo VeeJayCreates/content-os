@@ -17,6 +17,7 @@ export default defineConfig({
     "./src/schema/topic-candidate.ts",
     "./src/schema/semantic-embedding-cache.ts",
     "./src/schema/research-expansion.ts",
+    "./src/schema/production-queue.ts",
     "./src/schema/job.ts",
     "./src/schema/workflow.ts",
   ],
