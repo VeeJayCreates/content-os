@@ -92,7 +92,7 @@ export enum EditorialAssessmentBand { LOW = 'low', MEDIUM = 'medium', HIGH = 'hi
 export enum EditorialAssessmentLongevity { BREAKING = 'breaking', TIMELY = 'timely', EVERGREEN = 'evergreen' }
 export enum EditorialAssessmentRecommendation { REJECT = 'reject', HOLD = 'hold', CONSIDER = 'consider', STRONG_CANDIDATE = 'strong_candidate' }
 export enum ContentAngleType { BREAKING = 'breaking', EXPLAINER = 'explainer', FACT_CHECK = 'fact_check', ANALYSIS = 'analysis', UPDATE = 'update' }
-export enum AiTask { CONTENT_ANGLE = 'content_angle', SCRIPT_GENERATION = 'script_generation', CONTENT_PACKAGE_GENERATION = 'content_package_generation', SEMANTIC_EMBEDDING = 'semantic_embedding', SEMANTIC_RERANKING = 'semantic_reranking' }
+export enum AiTask { CONTENT_ANGLE = 'content_angle', SCRIPT_GENERATION = 'script_generation', CONTENT_PACKAGE_GENERATION = 'content_package_generation', SCENE_PLANNING = 'scene_planning', SEMANTIC_EMBEDDING = 'semantic_embedding', SEMANTIC_RERANKING = 'semantic_reranking' }
 export enum ScriptStatus { GENERATING = 'generating', READY = 'ready', FAILED = 'failed' }
 export enum ScriptFormat { YOUTUBE_SHORT = 'youtube_short', YOUTUBE_LONG = 'youtube_long' }
 export enum ScriptLanguage { HINDI = 'Hindi', HINGLISH = 'Hinglish', ENGLISH = 'English' }
@@ -106,3 +106,6 @@ export enum AiExecutionStatus { SUCCEEDED = 'succeeded', FAILED = 'failed' }
 export enum AiExecutionMode { SYNCHRONOUS = 'synchronous', BATCH = 'batch' }
 export enum AiBatchStatus { QUEUED = 'queued', SUBMITTED = 'submitted', PROCESSING = 'processing', COMPLETED = 'completed', FAILED = 'failed', CANCELLED = 'cancelled', EXPIRED = 'expired' }
 export enum AiBatchItemStatus { QUEUED = 'queued', SUBMITTED = 'submitted', PROCESSING = 'processing', COMPLETED = 'completed', FAILED = 'failed', CANCELLED = 'cancelled', EXPIRED = 'expired' }
+export enum ScenePlanStatus { PENDING = 'pending', READY = 'ready', FAILED = 'failed' }
+export enum SceneType { PRESENTER = 'presenter', B_ROLL = 'b_roll', MAP = 'map', ANIMATION = 'animation', IMAGE = 'image', GENERATED_VIDEO = 'generated_video', SCREEN_DEMO = 'screen_demo', CHART_OR_SCREENSHOT = 'chart_or_screenshot', TEXT = 'text' }
+export enum SceneMediaStrategy { REUSABLE_ASSET = 'reusable_asset', EXISTING_ASSET = 'existing_asset', STOCK_OR_SOURCE_FOOTAGE = 'stock_or_source_footage', PROGRAMMATIC_ANIMATION = 'programmatic_animation', REUSABLE_MAP_ANIMATION = 'reusable_map_animation', AI_IMAGE = 'ai_image', AI_IMAGE_TO_VIDEO = 'ai_image_to_video', GENERATED_VIDEO = 'generated_video', SCREEN_CAPTURE = 'screen_capture', PRESENTER = 'presenter', TEXT_ONLY = 'text_only', MANUAL = 'manual' }

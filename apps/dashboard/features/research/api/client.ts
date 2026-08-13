@@ -19,6 +19,7 @@ import type {
   ProductionQueueItem,
   FillProductionQueueResult,
   ContentScript,
+  ScenePlan,
   UpdateResearchSourceInput,
 } from "@content-os/contracts";
 
@@ -164,3 +165,7 @@ export function getQueueScript(queueItemId: string) { return requestUrl<ContentS
 export function generateQueueScript(queueItemId: string) { return requestUrl<ContentScript>(`${apiEndpoint}/production-queue/${encodeURIComponent(queueItemId)}/script`, { method: 'POST', body: JSON.stringify({}) }); }
 export function getQueueContentPackage(queueItemId: string) { return requestUrl<ContentScript>(`${apiEndpoint}/production-queue/${encodeURIComponent(queueItemId)}/content-package`); }
 export function generateQueueContentPackage(queueItemId: string) { return requestUrl<ContentScript>(`${apiEndpoint}/production-queue/${encodeURIComponent(queueItemId)}/content-package`, { method: 'POST', body: JSON.stringify({}) }); }
+export function getScenePlan(contentScriptId: string) { return requestUrl<ScenePlan>(`${apiEndpoint}/content-scripts/${encodeURIComponent(contentScriptId)}/scene-plan`); }
+export function generateScenePlan(contentScriptId: string) { return requestUrl<ScenePlan>(`${apiEndpoint}/content-scripts/${encodeURIComponent(contentScriptId)}/scene-plan`, { method: 'POST' }); }
+export function submitScenePlanBatch(contentScriptIds: string[]) { return requestUrl<{ batchId: string | null; submittedItemIds: string[]; skipped: { contentScriptId: string; reason: string }[] }>(`${apiEndpoint}/content-scripts/scene-plans/batch`, { method: 'POST', body: JSON.stringify({ contentScriptIds }) }); }
+export function reconcileScenePlanBatch(batchId: string) { return requestUrl<{ batchId: string; processed: number; succeeded: number; failed: number }>(`${apiEndpoint}/content-scripts/scene-plans/batch/${encodeURIComponent(batchId)}/reconcile`, { method: 'POST' }); }

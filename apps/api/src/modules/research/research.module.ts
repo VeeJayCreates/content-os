@@ -29,6 +29,9 @@ import { YouTubeChannelResolver } from './youtube-channel-resolver';
 import { YouTubeIngestionAdapter } from './youtube-ingestion.adapter';
 import { EditorialAssessmentController } from './editorial-assessment.controller';
 import { EditorialAssessmentService } from './editorial-assessment.service';
+import { ScenePlanningController } from './scene-planning.controller';
+import { ScenePlanningService } from './scene-planning.service';
+import { ScenePlanningBatchService } from './scene-planning-batch.service';
 import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } from './editorial-assessment.evaluator';
 
 @Module({
@@ -40,6 +43,7 @@ import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } fr
     ResearchPackageController,
     TopicSelectionController,
     EditorialAssessmentController,
+    ScenePlanningController,
     ProductionQueueController,
     ProductionQueueContentAngleController,
     ScriptGenerationController,
@@ -63,6 +67,8 @@ import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } fr
     YouTubeChannelResolver,
     YouTubeIngestionAdapter,
     EditorialAssessmentService,
+    ScenePlanningService,
+    ScenePlanningBatchService,
     OpenAiEditorialAssessmentEvaluator,
     { provide: EDITORIAL_ASSESSMENT_EVALUATOR, useExisting: OpenAiEditorialAssessmentEvaluator },
   ],

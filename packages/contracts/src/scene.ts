@@ -1,5 +1,4 @@
-export interface Scene {
-  id: string;
-  script: string;
-  duration: number;
-}
+import type { AiExecutionMode, SceneMediaStrategy, ScenePlanStatus, SceneType } from './enums.js';
+
+export interface PlannedScene { id: string; scenePlanId: string; index: number; narration: string; narrationWordCount: number; estimatedDurationMs: number; startEstimateMs: number; endEstimateMs: number; sceneType: SceneType; mediaStrategy: SceneMediaStrategy; visualDescription: string; primarySearchQuery: string | null; alternateSearchQueries: string[]; generatedMediaPrompt: string | null; onScreenText: string | null; subtitleText: string; citedFactIds: string[]; transitionRecommendation: string | null; continuityNotes: string | null; manualReview: boolean; manualReviewReason: string | null; createdAt: string; updatedAt: string; }
+export interface ScenePlan { id: string; projectId: string; contentScriptId: string; status: ScenePlanStatus; version: string; totalEstimatedDurationMs: number; sceneCount: number; provider: string | null; model: string | null; executionMode: AiExecutionMode; promptVersion: string; inputHash: string; failureCode: string | null; failureReason: string | null; createdAt: string; updatedAt: string; scenes: PlannedScene[]; }

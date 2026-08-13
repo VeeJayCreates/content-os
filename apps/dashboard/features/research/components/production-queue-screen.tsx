@@ -1,123 +1,29 @@
 'use client';
-
 import * as React from 'react';
-import type { ContentScript, EditorialAssessment, Project, ProductionQueueItem } from '@content-os/contracts';
-
+import type { ContentScript, Project, ProductionQueueItem, ScenePlan } from '@content-os/contracts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { getProjects } from '@/features/projects/api/client';
-import {
-  fillProductionQueue,
-  generateQueueContentAngle,
-  generateQueueContentPackage,
-  getProductionQueue,
-  getQueueContentAngle,
-  getQueueContentPackage,
-  ResearchApiError,
-} from '@/features/research/api/client';
+import { fillProductionQueue, generateScenePlan, getProductionQueue, getQueueContentPackage, getScenePlan, reconcileScenePlanBatch, ResearchApiError, submitScenePlanBatch } from '@/features/research/api/client';
 
-type QueueAngles = Record<string, EditorialAssessment | undefined>;
-type QueuePackages = Record<string, ContentScript | undefined>;
+type Values<T> = Record<string, T | undefined>;
+const label = (value: string) => value === 'b_roll' ? 'B-roll' : value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+const duration = (milliseconds: number) => { const seconds = Math.round(milliseconds / 1000); return seconds >= 60 ? `${Math.floor(seconds / 60)} min ${seconds % 60} sec` : `${seconds} sec`; };
 
 export function ProductionQueueScreen() {
-  const [projects, setProjects] = React.useState<Project[]>([]);
-  const [projectId, setProjectId] = React.useState('');
-  const [items, setItems] = React.useState<ProductionQueueItem[]>([]);
-  const [count, setCount] = React.useState(10);
-  const [loading, setLoading] = React.useState(true);
-  const [pending, setPending] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  const [angles, setAngles] = React.useState<QueueAngles>({});
-  const [packages, setPackages] = React.useState<QueuePackages>({});
-  const [generatingAngle, setGeneratingAngle] = React.useState<string | null>(null);
-  const [generatingPackage, setGeneratingPackage] = React.useState<string | null>(null);
-  const listRequestId = React.useRef(0);
-  const mounted = React.useRef(true);
-
+  const [projects, setProjects] = React.useState<Project[]>([]); const [projectId, setProjectId] = React.useState(''); const [items, setItems] = React.useState<ProductionQueueItem[]>([]);
+  const [packages, setPackages] = React.useState<Values<ContentScript>>({}); const [plans, setPlans] = React.useState<Values<ScenePlan>>({});
+  const [expanded, setExpanded] = React.useState<string | null>(null); const [count, setCount] = React.useState(10); const [loading, setLoading] = React.useState(true); const [pending, setPending] = React.useState(false); const [error, setError] = React.useState<string | null>(null);
+  const [planPending, setPlanPending] = React.useState<string | null>(null); const [batchId, setBatchId] = React.useState<string | null>(null); const [batchNote, setBatchNote] = React.useState<string | null>(null);
+  const mounted = React.useRef(true); const listRequest = React.useRef(0); const planRequest = React.useRef<Record<string, number>>({});
   React.useEffect(() => () => { mounted.current = false; }, []);
-
-  const loadRelated = React.useCallback(async (queueItems: ProductionQueueItem[], requestId: number) => {
-    const optional = async <T,>(fetcher: (id: string) => Promise<T>, item: ProductionQueueItem): Promise<T | undefined> => {
-      try { return await fetcher(item.id); }
-      catch (reason) { if (reason instanceof ResearchApiError && reason.status === 404) return undefined; throw reason; }
-    };
-    const [loadedAngles, loadedPackages] = await Promise.all([
-      Promise.all(queueItems.map(async (item) => [item.id, await optional(getQueueContentAngle, item)] as const)),
-      Promise.all(queueItems.map(async (item) => [item.id, await optional(getQueueContentPackage, item)] as const)),
-    ]);
-    if (mounted.current && requestId === listRequestId.current) {
-      setAngles(Object.fromEntries(loadedAngles));
-      setPackages(Object.fromEntries(loadedPackages));
-    }
-  }, []);
-
-  const load = React.useCallback(async (id: string) => {
-    if (!id) return;
-    const requestId = ++listRequestId.current;
-    setLoading(true);
-    try {
-      const queueItems = await getProductionQueue(id);
-      await loadRelated(queueItems, requestId);
-      if (mounted.current && requestId === listRequestId.current) { setItems(queueItems); setError(null); }
-    } catch (reason) {
-      if (mounted.current && requestId === listRequestId.current) setError(reason instanceof ResearchApiError ? reason.message : 'Unable to load production queue.');
-    } finally {
-      if (mounted.current && requestId === listRequestId.current) setLoading(false);
-    }
-  }, [loadRelated]);
-
-  React.useEffect(() => {
-    let active = true;
-    void getProjects().then((available) => {
-      if (!active) return;
-      setProjects(available);
-      const first = available[0];
-      if (first) { setProjectId(first.id); void load(first.id); } else setLoading(false);
-    }).catch(() => { if (active) { setError('Unable to load projects.'); setLoading(false); } });
-    return () => { active = false; };
-  }, [load]);
-
-  async function fill() {
-    if (!projectId || pending) return;
-    setPending(true);
-    try { await fillProductionQueue(projectId, count); await load(projectId); }
-    catch (reason) { setError(reason instanceof ResearchApiError ? reason.message : 'Unable to fill production queue.'); }
-    finally { if (mounted.current) setPending(false); }
-  }
-
-  async function generateAngle(item: ProductionQueueItem) {
-    if (generatingAngle) return;
-    setGeneratingAngle(item.id);
-    try { const assessment = await generateQueueContentAngle(item.id); if (mounted.current) setAngles((values) => ({ ...values, [item.id]: assessment })); }
-    catch (reason) { if (mounted.current) setError(reason instanceof ResearchApiError ? reason.message : 'Unable to generate Content Angle.'); }
-    finally { if (mounted.current) setGeneratingAngle(null); }
-  }
-
-  async function generateContentPackage(item: ProductionQueueItem) {
-    if (generatingPackage) return;
-    setGeneratingPackage(item.id);
-    try { const generated = await generateQueueContentPackage(item.id); if (mounted.current) setPackages((values) => ({ ...values, [item.id]: generated })); }
-    catch (reason) { if (mounted.current) setError(reason instanceof ResearchApiError ? reason.message : 'Unable to generate content package.'); }
-    finally { if (mounted.current) setGeneratingPackage(null); }
-  }
-
-  return <section className="mx-auto max-w-6xl">
-    <h1 className="text-3xl font-semibold">Production queue</h1>
-    <p className="mt-2 text-sm text-muted-foreground">Verified trending topics ready for production. Each Content Package uses the queue’s exact Research snapshot.</p>
-    <div className="mt-5 flex flex-wrap gap-2">
-      <select className="h-9 rounded-md border bg-background px-3" value={projectId} onChange={(event) => { setProjectId(event.target.value); void load(event.target.value); }}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select>
-      <input className="h-9 w-20 rounded-md border bg-background px-2" type="number" min={1} max={50} value={count} onChange={(event) => setCount(Math.min(50, Math.max(1, event.currentTarget.valueAsNumber || 1)))} />
-      <Button disabled={pending || !projectId} onClick={() => void fill()}>{pending ? 'Filling…' : 'Fill queue'}</Button>
-    </div>
-    {loading ? <p className="mt-6">Loading…</p> : error ? <Card className="mt-6"><CardContent className="pt-5">{error} <Button variant="outline" onClick={() => void load(projectId)}>Retry</Button></CardContent></Card> : !items.length ? <p className="mt-6 text-muted-foreground">No eligible topics are queued.</p> : <div className="mt-6 grid gap-3">{items.map((item) => {
-      const angle = angles[item.id];
-      const contentPackage = packages[item.id];
-      const hasAngle = angle?.status === 'ready';
-      return <Card key={item.id}><CardHeader><CardTitle>#{item.priority} {item.title}</CardTitle></CardHeader><CardContent className="space-y-2 text-sm text-muted-foreground">
-        <p>{item.verificationStatus} · {item.status} · queued {new Date(item.queuedAt).toLocaleString()}</p><p>{item.selectionReason}</p>
-        {hasAngle ? <div><p>Content Angle: {angle.angleType}</p><p className="font-medium text-foreground">{angle.videoIdeaTitle}</p><p>Hook: {angle.hook}</p></div> : <Button size="sm" disabled={generatingAngle !== null || item.status === 'failed'} onClick={() => void generateAngle(item)}>{generatingAngle === item.id ? 'Generating…' : 'Generate Angle'}</Button>}
-        {contentPackage ? <div className="space-y-2 border-t pt-2"><p>Content package generated · {contentPackage.format} · {contentPackage.language} · {contentPackage.targetDurationSeconds}s · {contentPackage.fullScript.split(/\s+/).filter(Boolean).length}/{contentPackage.targetWordCount} words</p><p className="font-medium text-foreground">Hook: {contentPackage.hook}</p><p className="line-clamp-3">{contentPackage.fullScript}</p><div><p className="font-medium text-foreground">Primary title: {contentPackage.primaryTitle}</p><p>Alternates: {contentPackage.alternateTitles.join(' · ')}</p><p className="line-clamp-2">Description: {contentPackage.description}</p><p>Tags: {contentPackage.tags.join(', ')}</p><p>Hashtags: {contentPackage.hashtags.join(' ')}</p><p>Keywords: {contentPackage.keywords.join(', ')}</p></div><div><p className="font-medium text-foreground">Thumbnail: {contentPackage.thumbnailText}</p><p className="line-clamp-2">{contentPackage.thumbnailCreativeBrief}</p></div></div> : hasAngle ? <Button size="sm" variant="outline" disabled={generatingPackage !== null || item.status === 'failed'} onClick={() => void generateContentPackage(item)}>{generatingPackage === item.id ? 'Generating package…' : 'Generate content package'}</Button> : <p>Content package: generate a Content Angle first.</p>}
-      </CardContent></Card>;
-    })}</div>}
-  </section>;
+  const message = (reason: unknown, fallback: string) => reason instanceof ResearchApiError ? reason.message : fallback;
+  const loadPlan = React.useCallback(async (itemId: string, scriptId: string) => { const id = (planRequest.current[itemId] ?? 0) + 1; planRequest.current[itemId] = id; try { const value = await getScenePlan(scriptId); if (mounted.current && planRequest.current[itemId] === id) setPlans((current) => ({ ...current, [itemId]: value })); } catch (reason) { if (!(reason instanceof ResearchApiError && reason.status === 404) && mounted.current && planRequest.current[itemId] === id) setError(message(reason, 'Unable to load Scene Plan.')); } }, []);
+  const load = React.useCallback(async (id: string) => { if (!id) return; const requestId = ++listRequest.current; setLoading(true); try { const queue = await getProductionQueue(id); const pairs = await Promise.all(queue.map(async (item) => { try { return [item.id, await getQueueContentPackage(item.id)] as const; } catch { return [item.id, undefined] as const; } })); if (!mounted.current || requestId !== listRequest.current) return; setItems(queue); setPackages(Object.fromEntries(pairs)); setError(null); pairs.forEach(([itemId, contentPackage]) => { if (contentPackage) void loadPlan(itemId, contentPackage.id); }); } catch (reason) { if (mounted.current && requestId === listRequest.current) setError(message(reason, 'Unable to load production queue.')); } finally { if (mounted.current && requestId === listRequest.current) setLoading(false); } }, [loadPlan]);
+  React.useEffect(() => { let active = true; void getProjects().then((value) => { if (!active) return; setProjects(value); if (value[0]) { setProjectId(value[0].id); void load(value[0].id); } else setLoading(false); }).catch(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [load]);
+  async function fill() { if (!projectId || pending) return; setPending(true); try { await fillProductionQueue(projectId, count); await load(projectId); } catch (reason) { setError(message(reason, 'Unable to fill production queue.')); } finally { if (mounted.current) setPending(false); } }
+  async function generatePlan(itemId: string, scriptId: string) { if (planPending) return; setPlanPending(itemId); const requestId = (planRequest.current[itemId] ?? 0) + 1; planRequest.current[itemId] = requestId; try { const value = await generateScenePlan(scriptId); if (mounted.current && planRequest.current[itemId] === requestId) setPlans((current) => ({ ...current, [itemId]: value })); } catch (reason) { if (mounted.current) setError(message(reason, 'Unable to generate Scene Plan.')); } finally { if (mounted.current) setPlanPending(null); } }
+  async function submitBatch() { const ids = Object.entries(packages).filter(([itemId, value]) => value && plans[itemId]?.status !== 'ready' && planPending !== itemId).map(([, value]) => value!.id); if (!ids.length || pending) return; setPending(true); try { const result = await submitScenePlanBatch(ids); setBatchId(result.batchId); setBatchNote(`${result.submittedItemIds.length} submitted; ${result.skipped.length} reused or skipped.`); } catch (reason) { setError(message(reason, 'Unable to submit Scene Plan batch.')); } finally { if (mounted.current) setPending(false); } }
+  async function reconcile() { if (!batchId || pending) return; setPending(true); try { const result = await reconcileScenePlanBatch(batchId); setBatchNote(`${result.succeeded} ready; ${result.failed} failed.`); await load(projectId); } catch (reason) { setError(message(reason, 'Unable to reconcile Scene Plan batch.')); } finally { if (mounted.current) setPending(false); } }
+  return <section className="mx-auto max-w-6xl"><h1 className="text-3xl font-semibold">Production queue</h1><p className="mt-2 text-sm text-muted-foreground">Verified trending topics ready for production. Each Content Package uses the queue’s exact Research snapshot.</p><div className="mt-5 flex flex-wrap gap-2"><select className="h-9 rounded-md border bg-background px-3" value={projectId} onChange={(event) => { setProjectId(event.target.value); void load(event.target.value); }}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select><input className="h-9 w-20 rounded-md border bg-background px-2" type="number" min={1} max={50} value={count} onChange={(event) => setCount(Math.min(50, Math.max(1, event.currentTarget.valueAsNumber || 1)))} /><Button disabled={pending || !projectId} onClick={() => void fill()}>{pending ? 'Filling…' : 'Fill queue'}</Button><Button variant="outline" disabled={pending || !Object.keys(packages).length} onClick={() => void submitBatch()}>Plan scenes in batch</Button>{batchId ? <Button variant="outline" disabled={pending} onClick={() => void reconcile()}>Check Scene Plan batch</Button> : null}</div>{batchNote ? <p className="mt-2 text-sm text-muted-foreground">{batchNote}</p> : null}{loading ? <p className="mt-6">Loading…</p> : error ? <Card className="mt-6"><CardContent className="pt-5">{error} <Button variant="outline" onClick={() => void load(projectId)}>Retry</Button></CardContent></Card> : <div className="mt-6 grid gap-3">{items.map((item) => { const contentPackage = packages[item.id]; const plan = plans[item.id]; return <Card key={item.id}><CardHeader><CardTitle>#{item.priority} {item.title}</CardTitle></CardHeader><CardContent className="space-y-2 text-sm text-muted-foreground"><p>{item.verificationStatus} · {item.status}</p><p>{item.selectionReason}</p>{contentPackage ? <><p>Content Package · {contentPackage.format} · {contentPackage.language}</p>{plan?.status === 'ready' ? <><Button size="sm" variant="outline" aria-expanded={expanded === item.id} onClick={() => setExpanded(expanded === item.id ? null : item.id)}>View Scene Plan · {plan.sceneCount} scenes · {duration(plan.totalEstimatedDurationMs)}</Button>{expanded === item.id ? <div className="max-h-[70vh] space-y-3 overflow-y-auto rounded border p-3" aria-label="Scene Plan inspector">{plan.scenes.map((scene) => <article key={scene.id} className="break-words rounded border p-3"><p className="font-medium text-foreground">Scene {scene.index + 1} · {duration(scene.estimatedDurationMs)} · {label(scene.sceneType)} · {label(scene.mediaStrategy)}</p><p className="mt-1 text-foreground">{scene.narration}</p><p>Visual: {scene.visualDescription}</p>{scene.primarySearchQuery ? <p>Search: {scene.primarySearchQuery}</p> : null}{scene.onScreenText ? <p>On-screen: {scene.onScreenText}</p> : null}{scene.manualReview ? <p className="text-amber-500">Manual review: {scene.manualReviewReason ?? 'Required'}</p> : null}</article>)}</div> : null}</> : <Button size="sm" variant="outline" disabled={planPending !== null} onClick={() => void generatePlan(item.id, contentPackage.id)}>{planPending === item.id ? 'Generating Scene Plan…' : plan?.status === 'failed' ? 'Retry Scene Plan' : 'Generate Scene Plan'}</Button>}</> : <p>Content package: generate a Content Angle first.</p>}</CardContent></Card>; })}</div>}</section>;
 }

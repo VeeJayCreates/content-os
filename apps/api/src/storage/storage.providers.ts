@@ -17,6 +17,7 @@ import {
   SemanticEmbeddingCacheRepository,
   ResearchExpansionRepository,
   ProductionQueueRepository,
+  ScenePlanRepository,
 } from '@content-os/storage';
 
 export const storageProviders = [
@@ -62,4 +63,5 @@ export const storageProviders = [
   { provide: SemanticEmbeddingCacheRepository, useFactory: () => new SemanticEmbeddingCacheRepository() },
   { provide: ResearchExpansionRepository, useFactory: () => new ResearchExpansionRepository() },
   { provide: ProductionQueueRepository, useFactory: () => new ProductionQueueRepository() },
+  { provide: ScenePlanRepository, useFactory: () => new ScenePlanRepository() },
 ];
