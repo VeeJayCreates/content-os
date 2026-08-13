@@ -21,6 +21,7 @@ import {
   ResearchExpansionRepository,
   ProductionQueueRepository,
   ScenePlanRepository,
+  AudioGenerationRepository,
 } from '@content-os/storage';
 
 @Module({
@@ -45,6 +46,7 @@ import {
     ResearchExpansionRepository,
     ProductionQueueRepository,
     ScenePlanRepository,
+    AudioGenerationRepository,
   ],
 })
 export class StorageModule {}

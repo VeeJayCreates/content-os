@@ -43,3 +43,9 @@ yarn-error.log*
 /content-os.db
 /apps/api/content-os.db
 apps/api/*.db
+
+# Local development artifacts (not production source)
+/.local/
+scripts/audio/.venv/
+*.wav
+__pycache__/

@@ -20,6 +20,7 @@ import type {
   FillProductionQueueResult,
   ContentScript,
   ScenePlan,
+  AudioGeneration,
   UpdateResearchSourceInput,
 } from "@content-os/contracts";
 
@@ -169,3 +170,7 @@ export function getScenePlan(contentScriptId: string) { return requestUrl<SceneP
 export function generateScenePlan(contentScriptId: string) { return requestUrl<ScenePlan>(`${apiEndpoint}/content-scripts/${encodeURIComponent(contentScriptId)}/scene-plan`, { method: 'POST' }); }
 export function submitScenePlanBatch(contentScriptIds: string[]) { return requestUrl<{ batchId: string | null; submittedItemIds: string[]; skipped: { contentScriptId: string; reason: string }[] }>(`${apiEndpoint}/content-scripts/scene-plans/batch`, { method: 'POST', body: JSON.stringify({ contentScriptIds }) }); }
 export function reconcileScenePlanBatch(batchId: string) { return requestUrl<{ batchId: string; processed: number; succeeded: number; failed: number }>(`${apiEndpoint}/content-scripts/scene-plans/batch/${encodeURIComponent(batchId)}/reconcile`, { method: 'POST' }); }
+export function getAudioGeneration(contentScriptId: string) { return requestUrl<AudioGeneration>(`${apiEndpoint}/content-scripts/${encodeURIComponent(contentScriptId)}/audio-generation`); }
+export function generateAudio(contentScriptId: string) { return requestUrl<AudioGeneration>(`${apiEndpoint}/content-scripts/${encodeURIComponent(contentScriptId)}/audio-generation`, { method: 'POST' }); }
+export function audioMediaUrl(contentScriptId: string) { return `${apiEndpoint}/content-scripts/${encodeURIComponent(contentScriptId)}/audio-generation/audio`; }
+export function audioSegmentMediaUrl(contentScriptId: string, segmentId: string) { return `${apiEndpoint}/content-scripts/${encodeURIComponent(contentScriptId)}/audio-generation/segments/${encodeURIComponent(segmentId)}/audio`; }

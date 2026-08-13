@@ -109,3 +109,10 @@ export enum AiBatchItemStatus { QUEUED = 'queued', SUBMITTED = 'submitted', PROC
 export enum ScenePlanStatus { PENDING = 'pending', READY = 'ready', FAILED = 'failed' }
 export enum SceneType { PRESENTER = 'presenter', B_ROLL = 'b_roll', MAP = 'map', ANIMATION = 'animation', IMAGE = 'image', GENERATED_VIDEO = 'generated_video', SCREEN_DEMO = 'screen_demo', CHART_OR_SCREENSHOT = 'chart_or_screenshot', TEXT = 'text' }
 export enum SceneMediaStrategy { REUSABLE_ASSET = 'reusable_asset', EXISTING_ASSET = 'existing_asset', STOCK_OR_SOURCE_FOOTAGE = 'stock_or_source_footage', PROGRAMMATIC_ANIMATION = 'programmatic_animation', REUSABLE_MAP_ANIMATION = 'reusable_map_animation', AI_IMAGE = 'ai_image', AI_IMAGE_TO_VIDEO = 'ai_image_to_video', GENERATED_VIDEO = 'generated_video', SCREEN_CAPTURE = 'screen_capture', PRESENTER = 'presenter', TEXT_ONLY = 'text_only', MANUAL = 'manual' }
+export enum AudioGenerationStatus { PENDING = 'pending', READY = 'ready', FAILED = 'failed' }
+export enum AudioSegmentStatus { PENDING = 'pending', READY = 'ready', FAILED = 'failed' }
+export enum VoiceEmotion { NEUTRAL = 'neutral', WARM = 'warm', SERIOUS = 'serious', URGENT = 'urgent', CURIOUS = 'curious', EMPATHETIC = 'empathetic', ENERGETIC = 'energetic' }
+export enum VoiceIntensity { LOW = 'low', MEDIUM = 'medium', HIGH = 'high' }
+export enum VoiceSpeakingRate { SLOW = 'slow', NORMAL = 'normal', FAST = 'fast' }
+export enum VoicePitchDirection { LOWER = 'lower', NEUTRAL = 'neutral', HIGHER = 'higher' }
+export enum VoiceNonVerbalEvent { LAUGH = 'laugh', CHUCKLE = 'chuckle', BREATH = 'breath', SIGH = 'sigh' }

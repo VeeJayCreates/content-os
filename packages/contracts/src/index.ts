@@ -12,6 +12,7 @@ export * from "./production-queue.js";
 export * from "./workflow.js";
 export * from "./job.js";
 export * from "./scene.js";
+export * from "./audio.js";
 export * from "./asset.js";
 export * from "./api.js";
 export * from "./ai.js";

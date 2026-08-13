@@ -18,6 +18,7 @@ import {
   ResearchExpansionRepository,
   ProductionQueueRepository,
   ScenePlanRepository,
+  AudioGenerationRepository,
 } from '@content-os/storage';
 
 export const storageProviders = [
@@ -64,4 +65,5 @@ export const storageProviders = [
   { provide: ResearchExpansionRepository, useFactory: () => new ResearchExpansionRepository() },
   { provide: ProductionQueueRepository, useFactory: () => new ProductionQueueRepository() },
   { provide: ScenePlanRepository, useFactory: () => new ScenePlanRepository() },
+  { provide: AudioGenerationRepository, useFactory: () => new AudioGenerationRepository() },
 ];
