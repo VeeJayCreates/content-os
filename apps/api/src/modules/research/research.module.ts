@@ -32,6 +32,8 @@ import { EditorialAssessmentService } from './editorial-assessment.service';
 import { ScenePlanningController } from './scene-planning.controller';
 import { ScenePlanningService } from './scene-planning.service';
 import { ScenePlanningBatchService } from './scene-planning-batch.service';
+import { VisualAssetManifestController } from './visual-asset-manifest.controller';
+import { VisualAssetRuntimeService } from './visual-asset-runtime.service';
 import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } from './editorial-assessment.evaluator';
 
 @Module({
@@ -44,6 +46,7 @@ import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } fr
     TopicSelectionController,
     EditorialAssessmentController,
     ScenePlanningController,
+    VisualAssetManifestController,
     ProductionQueueController,
     ProductionQueueContentAngleController,
     ScriptGenerationController,
@@ -69,6 +72,7 @@ import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } fr
     EditorialAssessmentService,
     ScenePlanningService,
     ScenePlanningBatchService,
+    VisualAssetRuntimeService,
     OpenAiEditorialAssessmentEvaluator,
     { provide: EDITORIAL_ASSESSMENT_EVALUATOR, useExisting: OpenAiEditorialAssessmentEvaluator },
   ],

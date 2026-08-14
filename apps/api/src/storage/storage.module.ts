@@ -22,6 +22,7 @@ import {
   ProductionQueueRepository,
   ScenePlanRepository,
   AudioGenerationRepository,
+  VisualAssetRepository,
 } from '@content-os/storage';
 
 @Module({
@@ -47,6 +48,7 @@ import {
     ProductionQueueRepository,
     ScenePlanRepository,
     AudioGenerationRepository,
+    VisualAssetRepository,
   ],
 })
 export class StorageModule {}

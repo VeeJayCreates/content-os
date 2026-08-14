@@ -1,42 +1,680 @@
-'use client';
+"use client";
 
-import * as React from 'react';
-import type { AudioGeneration, ContentScript, Project, ProductionQueueItem, ScenePlan } from '@content-os/contracts';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getProjects } from '@/features/projects/api/client';
-import { audioSegmentMediaUrl, fillProductionQueue, generateAudio, generateScenePlan, getAudioGeneration, getProductionQueue, getQueueContentPackage, getScenePlan, reconcileScenePlanBatch, ResearchApiError, submitScenePlanBatch } from '@/features/research/api/client';
+import * as React from "react";
+import type {
+  AudioGeneration,
+  ContentScript,
+  Project,
+  ProductionQueueItem,
+  ScenePlan,
+  VisualAssetManifest,
+} from "@content-os/contracts";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getProjects } from "@/features/projects/api/client";
+import {
+  audioSegmentMediaUrl,
+  fillProductionQueue,
+  generateAudio,
+  generateScenePlan,
+  getAudioGeneration,
+  getProductionQueue,
+  getQueueContentPackage,
+  getScenePlan,
+  getVisualAssetManifest,
+  prepareVisualAssetManifest,
+  reconcileScenePlanBatch,
+  ResearchApiError,
+  submitScenePlanBatch,
+} from "@/features/research/api/client";
+import { VisualAssetManifestPanel } from "./visual-asset-manifest-panel";
 
 type Values<T> = Record<string, T | undefined>;
-const label = (value: string) => value === 'b_roll' ? 'B-roll' : value.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
-const duration = (milliseconds: number) => { const seconds = Math.round(milliseconds / 1000); return seconds >= 60 ? `${Math.floor(seconds / 60)} min ${seconds % 60} sec` : `${seconds} sec`; };
+const label = (value: string) =>
+  value === "b_roll"
+    ? "B-roll"
+    : value
+        .replaceAll("_", " ")
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+const duration = (milliseconds: number) => {
+  const seconds = Math.round(milliseconds / 1000);
+  return seconds >= 60
+    ? `${Math.floor(seconds / 60)} min ${seconds % 60} sec`
+    : `${seconds} sec`;
+};
 
-function AudioPanel({ scriptId, value, pending, expanded, onGenerate, onToggle }: { scriptId: string; value: AudioGeneration | undefined; pending: boolean; expanded: boolean; onGenerate: () => void; onToggle: () => void }) {
+function AudioPanel({
+  scriptId,
+  value,
+  pending,
+  expanded,
+  onGenerate,
+  onToggle,
+}: {
+  scriptId: string;
+  value: AudioGeneration | undefined;
+  pending: boolean;
+  expanded: boolean;
+  onGenerate: () => void;
+  onToggle: () => void;
+}) {
   const players = React.useRef<Record<string, HTMLAudioElement | null>>({});
-  const [unavailable, setUnavailable] = React.useState<Record<string, true>>({});
-  React.useEffect(() => () => { Object.values(players.current).forEach((player) => player?.pause()); }, []);
-  const pauseOtherPlayers = React.useCallback((activePlayer: HTMLAudioElement) => { Object.values(players.current).forEach((player) => { if (player && player !== activePlayer && !player.paused) player.pause(); }); }, []);
-  if (!value) return <Button size="sm" variant="outline" disabled={pending} onClick={onGenerate}>{pending ? 'Generating Audio…' : 'Generate Audio'}</Button>;
-  if (value.status !== 'ready') return <Button size="sm" variant="outline" disabled={pending} onClick={onGenerate}>{pending ? 'Generating Audio…' : 'Retry Audio'}</Button>;
+  const [unavailable, setUnavailable] = React.useState<Record<string, true>>(
+    {},
+  );
+  React.useEffect(
+    () => () => {
+      Object.values(players.current).forEach((player) => player?.pause());
+    },
+    [],
+  );
+  const pauseOtherPlayers = React.useCallback(
+    (activePlayer: HTMLAudioElement) => {
+      Object.values(players.current).forEach((player) => {
+        if (player && player !== activePlayer && !player.paused) player.pause();
+      });
+    },
+    [],
+  );
+  if (!value)
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={pending}
+        onClick={onGenerate}
+      >
+        {pending ? "Generating Audio…" : "Generate Audio"}
+      </Button>
+    );
+  if (value.status !== "ready")
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={pending}
+        onClick={onGenerate}
+      >
+        {pending ? "Generating Audio…" : "Retry Audio"}
+      </Button>
+    );
   const singleSegment = value.segments.length === 1;
-  return <div className="space-y-2 rounded border p-3" aria-label="Audio Generation"><p className="font-medium text-foreground">Audio ready · {value.provider} · {value.model} · Speaker: {label(value.voiceId)}</p><p>{value.language} · {value.totalDurationMs ? duration(value.totalDurationMs) : 'Timing unavailable'} · {value.segments.length} segment{value.segments.length === 1 ? '' : 's'}</p>{value.segments.some((segment) => segment.voiceDirection.manualReview) ? <p className="text-amber-600">Manual review required for one or more audio segments.</p> : null}{singleSegment ? <><p>Play Audio</p><audio ref={(player) => { players.current[value.segments[0].id] = player; }} className="w-full" controls preload="metadata" aria-label="Scene 1 audio" onPlay={(event) => pauseOtherPlayers(event.currentTarget)} onError={() => setUnavailable((current) => ({ ...current, [value.segments[0].id]: true }))}><source src={audioSegmentMediaUrl(scriptId, value.segments[0].id)} type="audio/wav" />Your browser cannot play this audio.</audio>{unavailable[value.segments[0].id] ? <p role="status">Scene 1 audio is unavailable.</p> : null}</> : <><p>Review {value.segments.length} scene audios.</p><p>Combined voiceover will be assembled during video composition.</p></>}<Button size="sm" variant="outline" aria-expanded={expanded} onClick={onToggle}>{expanded ? 'Hide audio details' : singleSegment ? 'View audio details' : `Review ${value.segments.length} scene audios`}</Button>{expanded ? <div className="max-h-64 space-y-2 overflow-y-auto rounded border p-2" aria-label="Audio segment inspector">{value.segments.map((segment) => <article key={segment.id} className="space-y-2 rounded border p-2"><p className="text-foreground">Scene {segment.sceneIndex + 1} · {segment.startMs === null || segment.endMs === null ? 'Timing unavailable' : `${duration(segment.startMs)}–${duration(segment.endMs)}`}</p><p>Status: {label(segment.status)}{segment.voiceDirection.manualReview ? ' · Manual review' : ''}</p>{segment.status === 'ready' ? <><audio ref={(player) => { players.current[segment.id] = player; }} className="w-full" controls preload="metadata" aria-label={`Scene ${segment.sceneIndex + 1} audio`} onPlay={(event) => pauseOtherPlayers(event.currentTarget)} onError={() => setUnavailable((current) => ({ ...current, [segment.id]: true }))}><source src={audioSegmentMediaUrl(scriptId, segment.id)} type="audio/wav" />Your browser cannot play this audio.</audio>{unavailable[segment.id] ? <p role="status">Scene {segment.sceneIndex + 1} audio is unavailable.</p> : null}</> : <p>Scene {segment.sceneIndex + 1} audio is not ready.</p>}</article>)}</div> : null}</div>;
+  return (
+    <div className="space-y-2 rounded border p-3" aria-label="Audio Generation">
+      <p className="font-medium text-foreground">
+        Audio ready · {value.provider} · {value.model} · Speaker:{" "}
+        {label(value.voiceId)}
+      </p>
+      <p>
+        {value.language} ·{" "}
+        {value.totalDurationMs
+          ? duration(value.totalDurationMs)
+          : "Timing unavailable"}{" "}
+        · {value.segments.length} segment
+        {value.segments.length === 1 ? "" : "s"}
+      </p>
+      {value.segments.some((segment) => segment.voiceDirection.manualReview) ? (
+        <p className="text-amber-600">
+          Manual review required for one or more audio segments.
+        </p>
+      ) : null}
+      {singleSegment ? (
+        <>
+          <p>Play Audio</p>
+          <audio
+            ref={(player) => {
+              players.current[value.segments[0].id] = player;
+            }}
+            className="w-full"
+            controls
+            preload="metadata"
+            aria-label="Scene 1 audio"
+            onPlay={(event) => pauseOtherPlayers(event.currentTarget)}
+            onError={() =>
+              setUnavailable((current) => ({
+                ...current,
+                [value.segments[0].id]: true,
+              }))
+            }
+          >
+            <source
+              src={audioSegmentMediaUrl(scriptId, value.segments[0].id)}
+              type="audio/wav"
+            />
+            Your browser cannot play this audio.
+          </audio>
+          {unavailable[value.segments[0].id] ? (
+            <p role="status">Scene 1 audio is unavailable.</p>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <p>Review {value.segments.length} scene audios.</p>
+          <p>Combined voiceover will be assembled during video composition.</p>
+        </>
+      )}
+      <Button
+        size="sm"
+        variant="outline"
+        aria-expanded={expanded}
+        onClick={onToggle}
+      >
+        {expanded
+          ? "Hide audio details"
+          : singleSegment
+            ? "View audio details"
+            : `Review ${value.segments.length} scene audios`}
+      </Button>
+      {expanded ? (
+        <div
+          className="max-h-64 space-y-2 overflow-y-auto rounded border p-2"
+          aria-label="Audio segment inspector"
+        >
+          {value.segments.map((segment) => (
+            <article key={segment.id} className="space-y-2 rounded border p-2">
+              <p className="text-foreground">
+                Scene {segment.sceneIndex + 1} ·{" "}
+                {segment.startMs === null || segment.endMs === null
+                  ? "Timing unavailable"
+                  : `${duration(segment.startMs)}–${duration(segment.endMs)}`}
+              </p>
+              <p>
+                Status: {label(segment.status)}
+                {segment.voiceDirection.manualReview ? " · Manual review" : ""}
+              </p>
+              {segment.status === "ready" ? (
+                <>
+                  <audio
+                    ref={(player) => {
+                      players.current[segment.id] = player;
+                    }}
+                    className="w-full"
+                    controls
+                    preload="metadata"
+                    aria-label={`Scene ${segment.sceneIndex + 1} audio`}
+                    onPlay={(event) => pauseOtherPlayers(event.currentTarget)}
+                    onError={() =>
+                      setUnavailable((current) => ({
+                        ...current,
+                        [segment.id]: true,
+                      }))
+                    }
+                  >
+                    <source
+                      src={audioSegmentMediaUrl(scriptId, segment.id)}
+                      type="audio/wav"
+                    />
+                    Your browser cannot play this audio.
+                  </audio>
+                  {unavailable[segment.id] ? (
+                    <p role="status">
+                      Scene {segment.sceneIndex + 1} audio is unavailable.
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p>Scene {segment.sceneIndex + 1} audio is not ready.</p>
+              )}
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 export function ProductionQueueScreen() {
-  const [projects, setProjects] = React.useState<Project[]>([]); const [projectId, setProjectId] = React.useState(''); const [items, setItems] = React.useState<ProductionQueueItem[]>([]); const [packages, setPackages] = React.useState<Values<ContentScript>>({}); const [plans, setPlans] = React.useState<Values<ScenePlan>>({}); const [audio, setAudio] = React.useState<Values<AudioGeneration>>({});
-  const [expanded, setExpanded] = React.useState<string | null>(null); const [audioExpanded, setAudioExpanded] = React.useState<string | null>(null); const [count, setCount] = React.useState(10); const [loading, setLoading] = React.useState(true); const [pending, setPending] = React.useState(false); const [error, setError] = React.useState<string | null>(null); const [planPending, setPlanPending] = React.useState<string | null>(null); const [audioPending, setAudioPending] = React.useState<string | null>(null); const [batchId, setBatchId] = React.useState<string | null>(null); const [batchNote, setBatchNote] = React.useState<string | null>(null);
-  const mounted = React.useRef(true); const listRequest = React.useRef(0); const planRequest = React.useRef<Record<string, number>>({}); const audioRequest = React.useRef<Record<string, number>>({});
-  React.useEffect(() => () => { mounted.current = false; }, []);
-  const message = (reason: unknown, fallback: string) => reason instanceof ResearchApiError ? reason.message : fallback;
-  const loadPlan = React.useCallback(async (itemId: string, scriptId: string) => { const requestId = (planRequest.current[itemId] ?? 0) + 1; planRequest.current[itemId] = requestId; try { const value = await getScenePlan(scriptId); if (mounted.current && planRequest.current[itemId] === requestId) setPlans((current) => ({ ...current, [itemId]: value })); } catch (reason) { if (!(reason instanceof ResearchApiError && reason.status === 404) && mounted.current && planRequest.current[itemId] === requestId) setError(message(reason, 'Unable to load Scene Plan.')); } }, []);
-  const loadAudio = React.useCallback(async (itemId: string, scriptId: string) => { const requestId = (audioRequest.current[itemId] ?? 0) + 1; audioRequest.current[itemId] = requestId; try { const value = await getAudioGeneration(scriptId); if (mounted.current && audioRequest.current[itemId] === requestId) setAudio((current) => ({ ...current, [itemId]: value })); } catch (reason) { if (!(reason instanceof ResearchApiError && reason.status === 404) && mounted.current && audioRequest.current[itemId] === requestId) setError(message(reason, 'Unable to load audio generation.')); } }, []);
-  const load = React.useCallback(async (id: string) => { if (!id) return; const requestId = ++listRequest.current; setLoading(true); try { const queue = await getProductionQueue(id); const pairs = await Promise.all(queue.map(async (item) => { try { return [item.id, await getQueueContentPackage(item.id)] as const; } catch { return [item.id, undefined] as const; } })); if (!mounted.current || requestId !== listRequest.current) return; setItems(queue); setPackages(Object.fromEntries(pairs)); setError(null); pairs.forEach(([itemId, contentPackage]) => { if (contentPackage) void loadPlan(itemId, contentPackage.id); }); } catch (reason) { if (mounted.current && requestId === listRequest.current) setError(message(reason, 'Unable to load production queue.')); } finally { if (mounted.current && requestId === listRequest.current) setLoading(false); } }, [loadPlan]);
-  React.useEffect(() => { Object.entries(plans).forEach(([itemId, plan]) => { const contentPackage = packages[itemId]; if (plan?.status === 'ready' && contentPackage) void loadAudio(itemId, contentPackage.id); }); }, [loadAudio, packages, plans]);
-  React.useEffect(() => { let active = true; void getProjects().then((value) => { if (!active) return; setProjects(value); if (value[0]) { setProjectId(value[0].id); void load(value[0].id); } else setLoading(false); }).catch(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [load]);
-  async function fill() { if (!projectId || pending) return; setPending(true); try { await fillProductionQueue(projectId, count); await load(projectId); } catch (reason) { setError(message(reason, 'Unable to fill production queue.')); } finally { if (mounted.current) setPending(false); } }
-  async function generatePlan(itemId: string, scriptId: string) { if (planPending) return; setPlanPending(itemId); const requestId = (planRequest.current[itemId] ?? 0) + 1; planRequest.current[itemId] = requestId; try { const value = await generateScenePlan(scriptId); if (mounted.current && planRequest.current[itemId] === requestId) setPlans((current) => ({ ...current, [itemId]: value })); } catch (reason) { if (mounted.current) setError(message(reason, 'Unable to generate Scene Plan.')); } finally { if (mounted.current) setPlanPending(null); } }
-  async function generateItemAudio(itemId: string, scriptId: string) { if (audioPending) return; setAudioPending(itemId); const requestId = (audioRequest.current[itemId] ?? 0) + 1; audioRequest.current[itemId] = requestId; try { const value = await generateAudio(scriptId); if (mounted.current && audioRequest.current[itemId] === requestId) setAudio((current) => ({ ...current, [itemId]: value })); } catch (reason) { if (mounted.current) setError(message(reason, 'Unable to generate audio.')); } finally { if (mounted.current) setAudioPending(null); } }
-  async function submitBatch() { const ids = Object.entries(packages).filter(([itemId, value]) => value && plans[itemId]?.status !== 'ready' && planPending !== itemId).map(([, value]) => value!.id); if (!ids.length || pending) return; setPending(true); try { const result = await submitScenePlanBatch(ids); setBatchId(result.batchId); setBatchNote(`${result.submittedItemIds.length} submitted; ${result.skipped.length} reused or skipped.`); } catch (reason) { setError(message(reason, 'Unable to submit Scene Plan batch.')); } finally { if (mounted.current) setPending(false); } }
-  async function reconcile() { if (!batchId || pending) return; setPending(true); try { const result = await reconcileScenePlanBatch(batchId); setBatchNote(`${result.succeeded} ready; ${result.failed} failed.`); await load(projectId); } catch (reason) { setError(message(reason, 'Unable to reconcile Scene Plan batch.')); } finally { if (mounted.current) setPending(false); } }
-  return <section className="mx-auto max-w-6xl"><h1 className="text-3xl font-semibold">Production queue</h1><p className="mt-2 text-sm text-muted-foreground">Verified trending topics ready for production. Each Content Package uses the queue’s exact Research snapshot.</p><div className="mt-5 flex flex-wrap gap-2"><select className="h-9 rounded-md border bg-background px-3" value={projectId} onChange={(event) => { setProjectId(event.target.value); void load(event.target.value); }}>{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select><input className="h-9 w-20 rounded-md border bg-background px-2" type="number" min={1} max={50} value={count} onChange={(event) => setCount(Math.min(50, Math.max(1, event.currentTarget.valueAsNumber || 1)))} /><Button disabled={pending || !projectId} onClick={() => void fill()}>{pending ? 'Filling…' : 'Fill queue'}</Button><Button variant="outline" disabled={pending || !Object.keys(packages).length} onClick={() => void submitBatch()}>Plan scenes in batch</Button>{batchId ? <Button variant="outline" disabled={pending} onClick={() => void reconcile()}>Check Scene Plan batch</Button> : null}</div>{batchNote ? <p className="mt-2 text-sm text-muted-foreground">{batchNote}</p> : null}{loading ? <p className="mt-6">Loading…</p> : error ? <Card className="mt-6"><CardContent className="pt-5">{error} <Button variant="outline" onClick={() => void load(projectId)}>Retry</Button></CardContent></Card> : <div className="mt-6 grid gap-3">{items.map((item) => { const contentPackage = packages[item.id]; const plan = plans[item.id]; return <Card key={item.id}><CardHeader><CardTitle>#{item.priority} {item.title}</CardTitle></CardHeader><CardContent className="space-y-2 text-sm text-muted-foreground"><p>{item.verificationStatus} · {item.status}</p><p>{item.selectionReason}</p>{contentPackage ? <><p>Content Package · {contentPackage.format} · {contentPackage.language}</p>{plan?.status === 'ready' ? <><Button size="sm" variant="outline" aria-expanded={expanded === item.id} onClick={() => setExpanded(expanded === item.id ? null : item.id)}>View Scene Plan · {plan.sceneCount} scenes · {duration(plan.totalEstimatedDurationMs)}</Button>{expanded === item.id ? <div className="max-h-[70vh] space-y-3 overflow-y-auto rounded border p-3" aria-label="Scene Plan inspector">{plan.scenes.map((scene) => <article key={scene.id} className="break-words rounded border p-3"><p className="font-medium text-foreground">Scene {scene.index + 1} · {duration(scene.estimatedDurationMs)} · {label(scene.sceneType)} · {label(scene.mediaStrategy)}</p><p className="mt-1 text-foreground">{scene.narration}</p><p>Visual: {scene.visualDescription}</p>{scene.primarySearchQuery ? <p>Search: {scene.primarySearchQuery}</p> : null}{scene.onScreenText ? <p>On-screen: {scene.onScreenText}</p> : null}{scene.manualReview ? <p className="text-amber-500">Manual review: {scene.manualReviewReason ?? 'Required'}</p> : null}</article>)}</div> : null}<AudioPanel scriptId={contentPackage.id} value={audio[item.id]} pending={audioPending !== null} expanded={audioExpanded === item.id} onGenerate={() => void generateItemAudio(item.id, contentPackage.id)} onToggle={() => setAudioExpanded(audioExpanded === item.id ? null : item.id)} /></> : <Button size="sm" variant="outline" disabled={planPending !== null} onClick={() => void generatePlan(item.id, contentPackage.id)}>{planPending === item.id ? 'Generating Scene Plan…' : plan?.status === 'failed' ? 'Retry Scene Plan' : 'Generate Scene Plan'}</Button>}</> : <p>Content package: generate a Content Angle first.</p>}</CardContent></Card>; })}</div>}</section>;
+  const [projects, setProjects] = React.useState<Project[]>([]);
+  const [projectId, setProjectId] = React.useState("");
+  const [items, setItems] = React.useState<ProductionQueueItem[]>([]);
+  const [packages, setPackages] = React.useState<Values<ContentScript>>({});
+  const [plans, setPlans] = React.useState<Values<ScenePlan>>({});
+  const [audio, setAudio] = React.useState<Values<AudioGeneration>>({});
+  const [manifests, setManifests] = React.useState<Values<VisualAssetManifest>>(
+    {},
+  );
+  const [visualPending, setVisualPending] = React.useState<string | null>(null);
+  const [expanded, setExpanded] = React.useState<string | null>(null);
+  const [audioExpanded, setAudioExpanded] = React.useState<string | null>(null);
+  const [count, setCount] = React.useState(10);
+  const [loading, setLoading] = React.useState(true);
+  const [pending, setPending] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [planPending, setPlanPending] = React.useState<string | null>(null);
+  const [audioPending, setAudioPending] = React.useState<string | null>(null);
+  const [batchId, setBatchId] = React.useState<string | null>(null);
+  const [batchNote, setBatchNote] = React.useState<string | null>(null);
+  const mounted = React.useRef(true);
+  const listRequest = React.useRef(0);
+  const planRequest = React.useRef<Record<string, number>>({});
+  const audioRequest = React.useRef<Record<string, number>>({});
+  const visualRequest = React.useRef<Record<string, number>>({});
+  React.useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
+  const message = (reason: unknown, fallback: string) =>
+    reason instanceof ResearchApiError ? reason.message : fallback;
+  const loadPlan = React.useCallback(
+    async (itemId: string, scriptId: string) => {
+      const requestId = (planRequest.current[itemId] ?? 0) + 1;
+      planRequest.current[itemId] = requestId;
+      try {
+        const value = await getScenePlan(scriptId);
+        if (mounted.current && planRequest.current[itemId] === requestId)
+          setPlans((current) => ({ ...current, [itemId]: value }));
+      } catch (reason) {
+        if (
+          !(reason instanceof ResearchApiError && reason.status === 404) &&
+          mounted.current &&
+          planRequest.current[itemId] === requestId
+        )
+          setError(message(reason, "Unable to load Scene Plan."));
+      }
+    },
+    [],
+  );
+  const loadAudio = React.useCallback(
+    async (itemId: string, scriptId: string) => {
+      const requestId = (audioRequest.current[itemId] ?? 0) + 1;
+      audioRequest.current[itemId] = requestId;
+      try {
+        const value = await getAudioGeneration(scriptId);
+        if (mounted.current && audioRequest.current[itemId] === requestId)
+          setAudio((current) => ({ ...current, [itemId]: value }));
+      } catch (reason) {
+        if (
+          !(reason instanceof ResearchApiError && reason.status === 404) &&
+          mounted.current &&
+          audioRequest.current[itemId] === requestId
+        )
+          setError(message(reason, "Unable to load audio generation."));
+      }
+    },
+    [],
+  );
+  const loadManifest = React.useCallback(
+    async (itemId: string, scriptId: string) => {
+      const requestId = (visualRequest.current[itemId] ?? 0) + 1;
+      visualRequest.current[itemId] = requestId;
+      try {
+        const value = await getVisualAssetManifest(scriptId);
+        if (mounted.current && visualRequest.current[itemId] === requestId)
+          setManifests((current) => ({ ...current, [itemId]: value }));
+      } catch (reason) {
+        if (reason instanceof ResearchApiError && reason.status === 404) return;
+        if (mounted.current && visualRequest.current[itemId] === requestId)
+          setError(message(reason, "Unable to load Visual Assets."));
+      }
+    },
+    [],
+  );
+  const load = React.useCallback(
+    async (id: string) => {
+      if (!id) return;
+      const requestId = ++listRequest.current;
+      setLoading(true);
+      try {
+        const queue = await getProductionQueue(id);
+        const pairs = await Promise.all(
+          queue.map(async (item) => {
+            try {
+              return [item.id, await getQueueContentPackage(item.id)] as const;
+            } catch {
+              return [item.id, undefined] as const;
+            }
+          }),
+        );
+        if (!mounted.current || requestId !== listRequest.current) return;
+        setItems(queue);
+        setPackages(Object.fromEntries(pairs));
+        setError(null);
+        pairs.forEach(([itemId, contentPackage]) => {
+          if (contentPackage) void loadPlan(itemId, contentPackage.id);
+        });
+      } catch (reason) {
+        if (mounted.current && requestId === listRequest.current)
+          setError(message(reason, "Unable to load production queue."));
+      } finally {
+        if (mounted.current && requestId === listRequest.current)
+          setLoading(false);
+      }
+    },
+    [loadPlan],
+  );
+  React.useEffect(() => {
+    Object.entries(plans).forEach(([itemId, plan]) => {
+      const contentPackage = packages[itemId];
+      if (plan?.status === "ready" && contentPackage)
+        void loadAudio(itemId, contentPackage.id);
+    });
+  }, [loadAudio, packages, plans]);
+  React.useEffect(() => {
+    Object.entries(plans).forEach(([itemId, plan]) => {
+      const contentPackage = packages[itemId];
+      if (plan?.status === "ready" && contentPackage)
+        void loadManifest(itemId, contentPackage.id);
+    });
+  }, [loadManifest, packages, plans]);
+  React.useEffect(() => {
+    let active = true;
+    void getProjects()
+      .then((value) => {
+        if (!active) return;
+        setProjects(value);
+        if (value[0]) {
+          setProjectId(value[0].id);
+          void load(value[0].id);
+        } else setLoading(false);
+      })
+      .catch(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [load]);
+  async function fill() {
+    if (!projectId || pending) return;
+    setPending(true);
+    try {
+      await fillProductionQueue(projectId, count);
+      await load(projectId);
+    } catch (reason) {
+      setError(message(reason, "Unable to fill production queue."));
+    } finally {
+      if (mounted.current) setPending(false);
+    }
+  }
+  async function generatePlan(itemId: string, scriptId: string) {
+    if (planPending) return;
+    setPlanPending(itemId);
+    const requestId = (planRequest.current[itemId] ?? 0) + 1;
+    planRequest.current[itemId] = requestId;
+    try {
+      const value = await generateScenePlan(scriptId);
+      if (mounted.current && planRequest.current[itemId] === requestId)
+        setPlans((current) => ({ ...current, [itemId]: value }));
+    } catch (reason) {
+      if (mounted.current)
+        setError(message(reason, "Unable to generate Scene Plan."));
+    } finally {
+      if (mounted.current) setPlanPending(null);
+    }
+  }
+  async function generateItemAudio(itemId: string, scriptId: string) {
+    if (audioPending) return;
+    setAudioPending(itemId);
+    const requestId = (audioRequest.current[itemId] ?? 0) + 1;
+    audioRequest.current[itemId] = requestId;
+    try {
+      const value = await generateAudio(scriptId);
+      if (mounted.current && audioRequest.current[itemId] === requestId)
+        setAudio((current) => ({ ...current, [itemId]: value }));
+    } catch (reason) {
+      if (mounted.current)
+        setError(message(reason, "Unable to generate audio."));
+    } finally {
+      if (mounted.current) setAudioPending(null);
+    }
+  }
+  async function prepareVisualAssets(itemId: string, scriptId: string) {
+    if (visualPending) return;
+    setVisualPending(itemId);
+    try {
+      const value = await prepareVisualAssetManifest(scriptId);
+      if (mounted.current)
+        setManifests((current) => ({ ...current, [itemId]: value }));
+    } catch (reason) {
+      if (mounted.current)
+        setError(message(reason, "Unable to prepare Visual Assets."));
+    } finally {
+      if (mounted.current) setVisualPending(null);
+    }
+  }
+  async function submitBatch() {
+    const ids = Object.entries(packages)
+      .filter(
+        ([itemId, value]) =>
+          value && plans[itemId]?.status !== "ready" && planPending !== itemId,
+      )
+      .map(([, value]) => value!.id);
+    if (!ids.length || pending) return;
+    setPending(true);
+    try {
+      const result = await submitScenePlanBatch(ids);
+      setBatchId(result.batchId);
+      setBatchNote(
+        `${result.submittedItemIds.length} submitted; ${result.skipped.length} reused or skipped.`,
+      );
+    } catch (reason) {
+      setError(message(reason, "Unable to submit Scene Plan batch."));
+    } finally {
+      if (mounted.current) setPending(false);
+    }
+  }
+  async function reconcile() {
+    if (!batchId || pending) return;
+    setPending(true);
+    try {
+      const result = await reconcileScenePlanBatch(batchId);
+      setBatchNote(`${result.succeeded} ready; ${result.failed} failed.`);
+      await load(projectId);
+    } catch (reason) {
+      setError(message(reason, "Unable to reconcile Scene Plan batch."));
+    } finally {
+      if (mounted.current) setPending(false);
+    }
+  }
+  return (
+    <section className="mx-auto max-w-6xl">
+      <h1 className="text-3xl font-semibold">Production queue</h1>
+      <p className="mt-2 text-sm text-muted-foreground">
+        Verified trending topics ready for production. Each Content Package uses
+        the queue’s exact Research snapshot.
+      </p>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <select
+          className="h-9 rounded-md border bg-background px-3"
+          value={projectId}
+          onChange={(event) => {
+            setProjectId(event.target.value);
+            void load(event.target.value);
+          }}
+        >
+          {projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name}
+            </option>
+          ))}
+        </select>
+        <input
+          className="h-9 w-20 rounded-md border bg-background px-2"
+          type="number"
+          min={1}
+          max={50}
+          value={count}
+          onChange={(event) =>
+            setCount(
+              Math.min(50, Math.max(1, event.currentTarget.valueAsNumber || 1)),
+            )
+          }
+        />
+        <Button disabled={pending || !projectId} onClick={() => void fill()}>
+          {pending ? "Filling…" : "Fill queue"}
+        </Button>
+        <Button
+          variant="outline"
+          disabled={pending || !Object.keys(packages).length}
+          onClick={() => void submitBatch()}
+        >
+          Plan scenes in batch
+        </Button>
+        {batchId ? (
+          <Button
+            variant="outline"
+            disabled={pending}
+            onClick={() => void reconcile()}
+          >
+            Check Scene Plan batch
+          </Button>
+        ) : null}
+      </div>
+      {batchNote ? (
+        <p className="mt-2 text-sm text-muted-foreground">{batchNote}</p>
+      ) : null}
+      {loading ? (
+        <p className="mt-6">Loading…</p>
+      ) : error ? (
+        <Card className="mt-6">
+          <CardContent className="pt-5">
+            {error}{" "}
+            <Button variant="outline" onClick={() => void load(projectId)}>
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="mt-6 grid gap-3">
+          {items.map((item) => {
+            const contentPackage = packages[item.id];
+            const plan = plans[item.id];
+            return (
+              <Card key={item.id}>
+                <CardHeader>
+                  <CardTitle>
+                    #{item.priority} {item.title}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    {item.verificationStatus} · {item.status}
+                  </p>
+                  <p>{item.selectionReason}</p>
+                  {contentPackage ? (
+                    <>
+                      <p>
+                        Content Package · {contentPackage.format} ·{" "}
+                        {contentPackage.language}
+                      </p>
+                      {plan?.status === "ready" ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            aria-expanded={expanded === item.id}
+                            onClick={() =>
+                              setExpanded(expanded === item.id ? null : item.id)
+                            }
+                          >
+                            View Scene Plan · {plan.sceneCount} scenes ·{" "}
+                            {duration(plan.totalEstimatedDurationMs)}
+                          </Button>
+                          {expanded === item.id ? (
+                            <div
+                              className="max-h-[70vh] space-y-3 overflow-y-auto rounded border p-3"
+                              aria-label="Scene Plan inspector"
+                            >
+                              {plan.scenes.map((scene) => (
+                                <article
+                                  key={scene.id}
+                                  className="break-words rounded border p-3"
+                                >
+                                  <p className="font-medium text-foreground">
+                                    Scene {scene.index + 1} ·{" "}
+                                    {duration(scene.estimatedDurationMs)} ·{" "}
+                                    {label(scene.sceneType)} ·{" "}
+                                    {label(scene.mediaStrategy)}
+                                  </p>
+                                  <p className="mt-1 text-foreground">
+                                    {scene.narration}
+                                  </p>
+                                  <p>Visual: {scene.visualDescription}</p>
+                                  {scene.primarySearchQuery ? (
+                                    <p>Search: {scene.primarySearchQuery}</p>
+                                  ) : null}
+                                  {scene.onScreenText ? (
+                                    <p>On-screen: {scene.onScreenText}</p>
+                                  ) : null}
+                                  {scene.manualReview ? (
+                                    <p className="text-amber-500">
+                                      Manual review:{" "}
+                                      {scene.manualReviewReason ?? "Required"}
+                                    </p>
+                                  ) : null}
+                                </article>
+                              ))}
+                            </div>
+                          ) : null}
+                          <AudioPanel
+                            scriptId={contentPackage.id}
+                            value={audio[item.id]}
+                            pending={audioPending !== null}
+                            expanded={audioExpanded === item.id}
+                            onGenerate={() =>
+                              void generateItemAudio(item.id, contentPackage.id)
+                            }
+                            onToggle={() =>
+                              setAudioExpanded(
+                                audioExpanded === item.id ? null : item.id,
+                              )
+                            }
+                          />
+                          {manifests[item.id] ? (
+                            <VisualAssetManifestPanel
+                              contentScriptId={contentPackage.id}
+                              manifest={manifests[item.id]!}
+                              pending={visualPending !== null}
+                              onMutation={async () =>
+                                loadManifest(item.id, contentPackage.id)
+                              }
+                            />
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={visualPending !== null}
+                              onClick={() =>
+                                void prepareVisualAssets(
+                                  item.id,
+                                  contentPackage.id,
+                                )
+                              }
+                            >
+                              {visualPending === item.id
+                                ? "Preparing Visual Assets…"
+                                : "Prepare Visual Assets"}
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={planPending !== null}
+                          onClick={() =>
+                            void generatePlan(item.id, contentPackage.id)
+                          }
+                        >
+                          {planPending === item.id
+                            ? "Generating Scene Plan…"
+                            : plan?.status === "failed"
+                              ? "Retry Scene Plan"
+                              : "Generate Scene Plan"}
+                        </Button>
+                      )}
+                    </>
+                  ) : (
+                    <p>Content package: generate a Content Angle first.</p>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
 }
