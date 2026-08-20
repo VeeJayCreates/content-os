@@ -7,7 +7,8 @@ import { VisualAssetManifestController } from './visual-asset-manifest.controlle
 
 describe('VisualAssetManifestController', () => {
   const service = { prepare: jest.fn(), find: jest.fn(), finalize: jest.fn(), listCandidates: jest.fn(), upsertCandidate: jest.fn(), selectCandidate: jest.fn(), rejectCandidate: jest.fn(), clearCandidateSelection: jest.fn() };
-  const controller = new VisualAssetManifestController(service as never);
+  const acquisition = { prepare: jest.fn(), execute: jest.fn() };
+  const controller = new VisualAssetManifestController(service as never, acquisition as never);
 
   it('delegates every candidate operation through the requested content script', () => {
     const id = '00000000-0000-4000-8000-000000000001'; const candidate = '00000000-0000-4000-8000-000000000002';
@@ -24,5 +25,14 @@ describe('VisualAssetManifestController', () => {
     expect(service.rejectCandidate).toHaveBeenCalledWith(id, 'requirement-hash', candidate, 'unsafe licence');
     expect(service.clearCandidateSelection).toHaveBeenCalledWith(id, 'requirement-hash');
     expect(service.finalize).toHaveBeenCalledWith(id);
+  });
+
+  it('exposes configured acquisition preparation and execution', () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const runId = '00000000-0000-4000-8000-000000000003';
+    controller.prepareAcquisition(id);
+    controller.executeAcquisition(id, runId);
+    expect(acquisition.prepare).toHaveBeenCalledWith(id);
+    expect(acquisition.execute).toHaveBeenCalledWith(id, runId);
   });
 });

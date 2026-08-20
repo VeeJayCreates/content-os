@@ -11,6 +11,7 @@ export default defineConfig({
     "./src/schema/scene-plan.ts",
     "./src/schema/audio-generation.ts",
     "./src/schema/visual-asset.ts",
+    "./src/schema/visual-asset-acquisition.ts",
     "./src/schema/research-source.ts",
     "./src/schema/signal.ts",
     "./src/schema/opportunity.ts",

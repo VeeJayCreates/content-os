@@ -34,6 +34,10 @@ import { ScenePlanningService } from './scene-planning.service';
 import { ScenePlanningBatchService } from './scene-planning-batch.service';
 import { VisualAssetManifestController } from './visual-asset-manifest.controller';
 import { VisualAssetRuntimeService } from './visual-asset-runtime.service';
+import { VisualAssetAcquisitionService } from './visual-asset-acquisition.service';
+import { VisualAssetAcquisitionProviderRegistry } from './visual-asset-acquisition-provider.registry';
+import { PexelsVisualAssetProvider } from './pexels-visual-asset.provider';
+import { VisualAssetAcquisitionWorkflowService } from './visual-asset-acquisition-workflow.service';
 import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } from './editorial-assessment.evaluator';
 
 @Module({
@@ -73,6 +77,10 @@ import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } fr
     ScenePlanningService,
     ScenePlanningBatchService,
     VisualAssetRuntimeService,
+    VisualAssetAcquisitionService,
+    VisualAssetAcquisitionProviderRegistry,
+    PexelsVisualAssetProvider,
+    VisualAssetAcquisitionWorkflowService,
     OpenAiEditorialAssessmentEvaluator,
     { provide: EDITORIAL_ASSESSMENT_EVALUATOR, useExisting: OpenAiEditorialAssessmentEvaluator },
   ],

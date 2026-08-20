@@ -14,6 +14,14 @@ type CandidateInsert = Omit<typeof visualAssetCandidates.$inferInsert, 'id' | 'r
 
 const now = () => new Date().toISOString();
 
+export const mergeRediscoveredCandidate = <T extends { status: string; selectedAt: string | null; approvedAt: string | null }>(existing: T, discovered: Partial<T>) => ({
+  ...existing,
+  ...discovered,
+  status: existing.status,
+  selectedAt: existing.selectedAt,
+  approvedAt: existing.approvedAt,
+});
+
 const candidateSatisfies = (requirement: typeof sceneVisualRequirements.$inferSelect, candidate: typeof visualAssetCandidates.$inferSelect | undefined) => {
   if (!candidate || candidate.status === 'rejected' || candidate.status === 'stale' || candidate.status === 'unavailable') return false;
   if (!candidate.sourceUrl && !candidate.providerAssetId) return false;
@@ -74,8 +82,9 @@ export class VisualAssetRepository {
     if (!identity) throw new Error('Candidate identity is required');
     const existing = (await db.select().from(visualAssetCandidates).where(and(eq(visualAssetCandidates.requirementId, requirementId), identity)))[0];
     if (existing) {
-      await db.update(visualAssetCandidates).set(data).where(eq(visualAssetCandidates.id, existing.id));
-      return { ...existing, ...data };
+      const update = { ...data, status: existing.status, selectedAt: existing.selectedAt, approvedAt: existing.approvedAt };
+      await db.update(visualAssetCandidates).set(update).where(eq(visualAssetCandidates.id, existing.id));
+      return mergeRediscoveredCandidate(existing, data);
     }
     const candidate = { id: randomUUID(), requirementId, discoveredAt: now(), selectedAt: null, approvedAt: null, ...data };
     await db.insert(visualAssetCandidates).values(candidate);

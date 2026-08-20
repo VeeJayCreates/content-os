@@ -20,6 +20,7 @@ import {
   ScenePlanRepository,
   AudioGenerationRepository,
   VisualAssetRepository,
+  VisualAssetAcquisitionRepository,
 } from '@content-os/storage';
 
 export const storageProviders = [
@@ -68,4 +69,5 @@ export const storageProviders = [
   { provide: ScenePlanRepository, useFactory: () => new ScenePlanRepository() },
   { provide: AudioGenerationRepository, useFactory: () => new AudioGenerationRepository() },
   { provide: VisualAssetRepository, useFactory: () => new VisualAssetRepository() },
+  { provide: VisualAssetAcquisitionRepository, useFactory: () => new VisualAssetAcquisitionRepository() },
 ];
