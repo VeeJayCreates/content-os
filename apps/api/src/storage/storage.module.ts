@@ -24,6 +24,7 @@ import {
   AudioGenerationRepository,
   VisualAssetRepository,
   VisualAssetAcquisitionRepository,
+  VideoCompositionRepository,
 } from '@content-os/storage';
 
 @Module({
@@ -51,6 +52,7 @@ import {
     AudioGenerationRepository,
     VisualAssetRepository,
     VisualAssetAcquisitionRepository,
+    VideoCompositionRepository,
   ],
 })
 export class StorageModule {}

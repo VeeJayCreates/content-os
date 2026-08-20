@@ -1,0 +1,3 @@
+import { Controller, Get, Param, ParseUUIDPipe, Post } from '@nestjs/common';
+import { VideoCompositionService } from './video-composition.service';
+@Controller('content-scripts') export class VideoCompositionController { constructor(private readonly service:VideoCompositionService){} @Post(':id/video-composition-plan') prepare(@Param('id',new ParseUUIDPipe()) id:string){return this.service.prepare(id);} @Get(':id/video-composition-plan') find(@Param('id',new ParseUUIDPipe()) id:string){return this.service.find(id);} }

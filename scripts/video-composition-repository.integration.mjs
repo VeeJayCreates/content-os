@@ -1,0 +1,42 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const require = createRequire(new URL('../packages/storage/package.json', import.meta.url));
+const Database = require('better-sqlite3');
+const { drizzle } = require('drizzle-orm/better-sqlite3');
+const { migrate } = require('drizzle-orm/better-sqlite3/migrator');
+let directory;
+let control;
+try {
+  directory = await mkdtemp(join(tmpdir(), 'content-os-composition-'));
+  const path = join(directory, 'test.db');
+  process.env.DATABASE_URL = path;
+  control = new Database(path);
+  migrate(drizzle(control), { migrationsFolder: fileURLToPath(new URL('../packages/storage/migrations', import.meta.url)) });
+  const { VideoCompositionRepository, closeStorageConnection } = await import('../packages/storage/dist/index.js');
+  const repository = new VideoCompositionRepository();
+  const otherRepository = new VideoCompositionRepository();
+  const claim = await repository.acquirePreparationClaim('script');
+  assert.ok(claim);
+  assert.equal(await otherRepository.acquirePreparationClaim('script'), undefined);
+  control.prepare('UPDATE video_composition_preparation_claims SET claimed_at=? WHERE content_script_id=?').run(new Date(Date.now()-VideoCompositionRepository.PREPARATION_CLAIM_TIMEOUT_MS-1000).toISOString(),'script');
+  const recoveredClaim=await otherRepository.acquirePreparationClaim('script');
+  assert.ok(recoveredClaim);
+  assert.notEqual(recoveredClaim,claim);
+  assert.equal(await repository.acquirePreparationClaim('script'),undefined);
+  await otherRepository.releasePreparationClaim('script', recoveredClaim);
+  assert.ok(await repository.acquirePreparationClaim('script'));
+  control.prepare('DELETE FROM video_composition_preparation_claims').run();
+  const identity = { projectId:'project',contentScriptId:'script',scenePlanId:'plan',scenePlanInputHash:'plan-hash',audioGenerationId:'audio',audioInputHash:'audio-hash',visualAssetManifestId:'manifest',visualManifestInputHash:'manifest-hash',version:'v1',inputHash:'input-1',status:'ready',totalDurationMs:2000,sceneCount:2,failureCode:null,failureReason:null };
+  const scenes = [0,1].map(index => ({ plannedSceneId:`scene-${index}`,audioSegmentId:`audio-${index}`,audioStartMs:index*1000,audioEndMs:(index+1)*1000,audioDurationMs:1000,visualRequirementId:`requirement-${index}`,visualRequirementType:'stock_footage',assetStrategy:'selected_candidate',selectedCandidateId:`candidate-${index}`,candidateIdentityHash:`candidate-hash-${index}` }));
+  const first = await repository.upsert(identity, scenes);
+  assert.deepEqual(first.scenes.map(scene => scene.sceneIndex), [0,1]);
+  const replaced = await repository.upsert({ ...identity,audioInputHash:'audio-hash-2',inputHash:'input-2',sceneCount:1,totalDurationMs:1000 }, [scenes[0]]);
+  assert.equal(replaced.id, first.id);assert.equal(replaced.inputHash, 'input-2');assert.equal(replaced.scenes.length, 1);
+  assert.equal(control.prepare('SELECT count(*) count FROM video_composition_plans WHERE content_script_id=?').get('script').count, 1);
+  closeStorageConnection();control.close();control=undefined;console.log('video composition repository integration passed');
+} finally { if(control)control.close();if(directory)await rm(directory,{recursive:true,force:true}); }

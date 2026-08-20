@@ -1,0 +1,5 @@
+import type { VideoCompositionAssetStrategy, VideoCompositionFailureCode, VideoCompositionPlanStatus } from './enums.js';
+
+export interface VideoCompositionIdentity { contentScriptId: string; scenePlanId: string; scenePlanInputHash: string; audioGenerationId: string; audioInputHash: string; visualAssetManifestId: string; visualManifestInputHash: string; }
+export interface VideoCompositionScene { id: string; compositionPlanId: string; sceneIndex: number; plannedSceneId: string; audioSegmentId: string; audioStartMs: number; audioEndMs: number; audioDurationMs: number; visualRequirementId: string; visualRequirementType: string; assetStrategy: VideoCompositionAssetStrategy; selectedCandidateId: string | null; candidateIdentityHash: string | null; createdAt: string; }
+export interface VideoCompositionPlan extends VideoCompositionIdentity { id: string; projectId: string; version: string; inputHash: string; status: VideoCompositionPlanStatus; totalDurationMs: number; sceneCount: number; failureCode: VideoCompositionFailureCode | null; failureReason: string | null; createdAt: string; updatedAt: string; scenes: VideoCompositionScene[]; }

@@ -14,6 +14,7 @@ export * from "./job.js";
 export * from "./scene.js";
 export * from "./audio.js";
 export * from "./visual-asset.js";
+export * from "./video-composition.js";
 export * from "./asset.js";
 export * from "./api.js";
 export * from "./ai.js";
