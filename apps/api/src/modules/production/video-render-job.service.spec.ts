@@ -1,0 +1,16 @@
+jest.mock('@content-os/storage',()=>({VideoRenderInputRepository:class{},VideoRenderJobRepository:class{},VideoRenderJobRepositoryError:class extends Error{constructor(public code:string,message:string){super(message);}}}));
+jest.mock('@content-os/contracts',()=>({VideoRenderInputManifestStatus:{READY:'ready'},VideoRenderJobFailureCode:{RENDER_INPUT_NOT_FOUND:'render_input_not_found',RENDER_INPUT_NOT_READY:'render_input_not_ready',RENDER_INPUT_STALE:'render_input_stale',RETRY_NOT_FAILED:'retry_not_failed',ENQUEUE_CONFLICT:'enqueue_conflict'}}));
+import { ConflictException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { VideoRenderJobRepositoryError } from '@content-os/storage';
+import { VideoRenderJobService } from './video-render-job.service';
+
+describe('VideoRenderJobService',()=>{
+ const ready={id:'manifest-1',contentScriptId:'script-1',inputHash:'hash-1',status:'ready'};
+ const setup=(manifest:any=ready,current=true)=>{const manifests={findByContentScriptId:jest.fn().mockResolvedValue(manifest)};const jobs={findByContentScriptId:jest.fn(),enqueue:jest.fn().mockResolvedValue({id:'job-1',status:'queued'})};const renderInputs={isCurrent:jest.fn().mockResolvedValue(current)};return {manifests,jobs,renderInputs,service:new VideoRenderJobService(manifests as any,jobs as any,renderInputs as any)};};
+ it('queues a READY manifest with its immutable identity',async()=>{const {service,jobs}=setup();await expect(service.enqueue('script-1')).resolves.toMatchObject({status:'queued'});expect(jobs.enqueue).toHaveBeenCalledWith('script-1','manifest-1','hash-1',false);});
+ it('rejects missing and failed manifests',async()=>{await expect(setup(null).service.enqueue('script-1')).rejects.toBeInstanceOf(NotFoundException);await expect(setup({...ready,status:'failed'}).service.enqueue('script-1')).rejects.toBeInstanceOf(UnprocessableEntityException);});
+ it('rejects a READY manifest after an upstream identity changes',async()=>{const {service,jobs}=setup(ready,false);await expect(service.enqueue('script-1')).rejects.toMatchObject({response:{code:'render_input_stale'}});expect(jobs.enqueue).not.toHaveBeenCalled();});
+ it('uses explicit retry and maps an atomic stale check',async()=>{const {service,jobs}=setup();await service.retry('script-1');expect(jobs.enqueue).toHaveBeenCalledWith('script-1','manifest-1','hash-1',true);jobs.enqueue.mockRejectedValue(new VideoRenderJobRepositoryError('render_input_stale','changed'));await expect(service.enqueue('script-1')).rejects.toBeInstanceOf(ConflictException);});
+ it('returns a contracted and bounded retry conflict',async()=>{const {service,jobs}=setup();jobs.enqueue.mockRejectedValue(new VideoRenderJobRepositoryError('retry_not_failed','Only failed jobs can be retried'));await expect(service.retry('script-1')).rejects.toMatchObject({status:409,response:{code:'retry_not_failed',message:'Only failed jobs can be retried'}});});
+ it('returns the current job and reports missing status',async()=>{const {service,jobs}=setup();jobs.findByContentScriptId.mockResolvedValueOnce({id:'job'}).mockResolvedValueOnce(undefined);await expect(service.find('script-1')).resolves.toEqual({id:'job'});await expect(service.find('script-1')).rejects.toBeInstanceOf(NotFoundException);});
+});

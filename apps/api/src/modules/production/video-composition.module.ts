@@ -5,4 +5,6 @@ import { VideoCompositionController } from './video-composition.controller';
 import { VideoCompositionService } from './video-composition.service';
 import { VideoRenderInputController } from './video-render-input.controller';
 import { VideoRenderInputService } from './video-render-input.service';
-@Module({imports:[StorageModule,MediaModule],controllers:[VideoCompositionController,VideoRenderInputController],providers:[VideoCompositionService,VideoRenderInputService]}) export class VideoCompositionModule {}
+import { VideoRenderJobController } from './video-render-job.controller';
+import { VideoRenderJobService } from './video-render-job.service';
+@Module({imports:[StorageModule,MediaModule],controllers:[VideoCompositionController,VideoRenderInputController,VideoRenderJobController],providers:[VideoCompositionService,VideoRenderInputService,VideoRenderJobService]}) export class VideoCompositionModule {}

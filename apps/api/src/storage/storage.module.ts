@@ -26,6 +26,8 @@ import {
   VisualAssetAcquisitionRepository,
   VideoCompositionRepository,
   MediaAssetRepository,
+  VideoRenderInputRepository,
+  VideoRenderJobRepository,
 } from '@content-os/storage';
 
 @Module({
@@ -55,6 +57,8 @@ import {
     VisualAssetAcquisitionRepository,
     VideoCompositionRepository,
     MediaAssetRepository,
+    VideoRenderInputRepository,
+    VideoRenderJobRepository,
   ],
 })
 export class StorageModule {}
