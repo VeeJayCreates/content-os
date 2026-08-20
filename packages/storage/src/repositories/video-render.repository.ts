@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { db } from '../db.js';
 import { videoRenderInputManifests,videoRenderSceneInputs,videoRenderJobs,videoRenderJobAttempts } from '../schema/video-render.js';
 import { videoCompositionPlans } from '../schema/video-composition.js';
@@ -7,12 +7,16 @@ import { audioGenerations } from '../schema/audio-generation.js';
 import { visualAssetManifests } from '../schema/visual-asset.js';
 type ManifestWrite=Omit<typeof videoRenderInputManifests.$inferInsert,'id'|'createdAt'|'updatedAt'>;
 type SceneWrite=Omit<typeof videoRenderSceneInputs.$inferInsert,'id'|'manifestId'|'sceneIndex'>;
+type VideoRenderWorkerIdentity={jobId:string;attemptId:string;renderInputManifestId:string;renderInputHash:string};
+type VideoRenderProgressUpdate=VideoRenderWorkerIdentity&{completedUnits:number;totalUnits:number};
+type VideoRenderCompletionUpdate=VideoRenderProgressUpdate;
+type VideoRenderFailureUpdate=VideoRenderWorkerIdentity&{message?:string};
 export class VideoRenderInputRepository{
  async findByContentScriptId(contentScriptId:string){const manifest=(await db.select().from(videoRenderInputManifests).where(eq(videoRenderInputManifests.contentScriptId,contentScriptId)))[0];if(!manifest)return undefined;const scenes=await db.select().from(videoRenderSceneInputs).where(eq(videoRenderSceneInputs.manifestId,manifest.id)).orderBy(videoRenderSceneInputs.sceneIndex);return {...manifest,scenes};}
  async upsert(data:ManifestWrite,scenes:SceneWrite[]){const now=new Date().toISOString();db.transaction(tx=>{tx.insert(videoRenderInputManifests).values({id:randomUUID(),createdAt:now,updatedAt:now,...data}).onConflictDoUpdate({target:videoRenderInputManifests.contentScriptId,set:{...data,updatedAt:now}}).run();const manifest=tx.select().from(videoRenderInputManifests).where(eq(videoRenderInputManifests.contentScriptId,data.contentScriptId)).get();if(!manifest)throw new Error('Unable to persist render-input manifest');tx.delete(videoRenderSceneInputs).where(eq(videoRenderSceneInputs.manifestId,manifest.id)).run();if(scenes.length)tx.insert(videoRenderSceneInputs).values(scenes.map((scene,sceneIndex)=>({id:randomUUID(),manifestId:manifest.id,sceneIndex,...scene}))).run();});const stored=await this.findByContentScriptId(data.contentScriptId);if(!stored)throw new Error('Unable to read render-input manifest');return stored;}
 }
 
-export type VideoRenderJobRepositoryErrorCode='render_input_not_found'|'render_input_not_ready'|'render_input_stale'|'retry_not_failed'|'enqueue_conflict';
+export type VideoRenderJobRepositoryErrorCode='render_input_not_found'|'render_input_not_ready'|'render_input_stale'|'retry_not_failed'|'enqueue_conflict'|'no_queued_attempt'|'stale_worker'|'invalid_transition'|'invalid_progress';
 export class VideoRenderJobRepositoryError extends Error{constructor(readonly code:VideoRenderJobRepositoryErrorCode,message:string){super(message);}}
 
 const ACTIVE_OR_COMPLETE=new Set(['queued','running','completed']);
@@ -27,6 +31,38 @@ export class VideoRenderJobRepository{
   return {id:job.id,projectId:job.projectId,contentScriptId:job.contentScriptId,attemptId:attempt.id,attemptNumber:attempt.attemptNumber,renderInputManifestId:attempt.renderInputManifestId,renderInputHash:attempt.renderInputHash,status,progress,failureCode,failureMessage:null,queuedAt:attempt.queuedAt,startedAt:attempt.startedAt,completedAt:attempt.completedAt,updatedAt:attempt.updatedAt};
  }
  async findByContentScriptId(contentScriptId:string){const job=(await db.select().from(videoRenderJobs).where(eq(videoRenderJobs.contentScriptId,contentScriptId)))[0];if(!job)return undefined;const attempt=(await db.select().from(videoRenderJobAttempts).where(eq(videoRenderJobAttempts.id,job.currentAttemptId)))[0];return attempt?this.present(job,attempt):undefined;}
+ private validateProgress(completedUnits:number,totalUnits:number){if(!Number.isSafeInteger(completedUnits)||!Number.isSafeInteger(totalUnits)||totalUnits<=0||completedUnits<0||completedUnits>totalUnits)throw new VideoRenderJobRepositoryError('invalid_progress','Render progress must be safe integers between zero and total units');}
+ private async transition(identity:VideoRenderWorkerIdentity,kind:'progress'|'completed'|'failed',completedUnits?:number,totalUnits?:number){
+  return db.transaction(tx=>{
+   const job=tx.select().from(videoRenderJobs).where(eq(videoRenderJobs.id,identity.jobId)).get();
+   const attempt=tx.select().from(videoRenderJobAttempts).where(eq(videoRenderJobAttempts.id,identity.attemptId)).get();
+   if(!job||!attempt||attempt.jobId!==job.id||job.currentAttemptId!==attempt.id||attempt.renderInputManifestId!==identity.renderInputManifestId||attempt.renderInputHash!==identity.renderInputHash)throw new VideoRenderJobRepositoryError('stale_worker','Render worker identity is not the current attempt');
+   if(kind==='failed'){
+    if(attempt.status==='failed'&&attempt.failureCode==='execution_failed'&&attempt.failureMessage==='Video render execution failed')return this.present(job,attempt);
+    if(attempt.status!=='running')throw new VideoRenderJobRepositoryError('invalid_transition','Only a running render attempt can fail');
+    const now=new Date().toISOString();tx.update(videoRenderJobAttempts).set({status:'failed',failureCode:'execution_failed',failureMessage:'Video render execution failed',completedAt:now,updatedAt:now}).where(and(eq(videoRenderJobAttempts.id,attempt.id),eq(videoRenderJobAttempts.status,'running'))).run();
+   }else{
+    this.validateProgress(completedUnits!,totalUnits!);
+    if(attempt.status===kind&&attempt.completedUnits===completedUnits&&attempt.totalUnits===totalUnits)return this.present(job,attempt);
+    if(attempt.status!=='running')throw new VideoRenderJobRepositoryError('invalid_transition',`Only a running render attempt can report ${kind}`);
+    if(attempt.totalUnits!==null&&attempt.totalUnits!==totalUnits)throw new VideoRenderJobRepositoryError('invalid_progress','Render progress total units cannot change');
+    if(attempt.completedUnits!==null&&completedUnits!<attempt.completedUnits)throw new VideoRenderJobRepositoryError('invalid_progress','Render progress cannot decrease');
+    if(kind==='completed'&&completedUnits!==totalUnits)throw new VideoRenderJobRepositoryError('invalid_progress','Completed render progress must equal total units');
+    const now=new Date().toISOString();tx.update(videoRenderJobAttempts).set({status:kind==='completed'?'completed':'running',completedUnits,totalUnits,completedAt:kind==='completed'?now:null,updatedAt:now}).where(and(eq(videoRenderJobAttempts.id,attempt.id),eq(videoRenderJobAttempts.status,'running'))).run();
+   }
+   const updated=tx.select().from(videoRenderJobAttempts).where(eq(videoRenderJobAttempts.id,attempt.id)).get()!;return this.present(job,updated);
+  });
+ }
+ async claimNextQueued(){
+  return db.transaction(tx=>{
+   const candidates=tx.select({attempt:videoRenderJobAttempts,job:videoRenderJobs}).from(videoRenderJobAttempts).innerJoin(videoRenderJobs,and(eq(videoRenderJobs.id,videoRenderJobAttempts.jobId),eq(videoRenderJobs.currentAttemptId,videoRenderJobAttempts.id))).where(eq(videoRenderJobAttempts.status,'queued')).orderBy(asc(videoRenderJobAttempts.queuedAt),asc(videoRenderJobAttempts.id)).all();
+   for(const candidate of candidates){const now=new Date().toISOString();const claimed=tx.update(videoRenderJobAttempts).set({status:'running',startedAt:now,updatedAt:now}).where(and(eq(videoRenderJobAttempts.id,candidate.attempt.id),eq(videoRenderJobAttempts.status,'queued'))).run();if(claimed.changes===1){const attempt={...candidate.attempt,status:'running',startedAt:now,updatedAt:now};return this.present(candidate.job,attempt);}}
+   return undefined;
+  });
+ }
+ reportProgress(update:VideoRenderProgressUpdate){return this.transition(update,'progress',update.completedUnits,update.totalUnits);}
+ complete(update:VideoRenderCompletionUpdate){return this.transition(update,'completed',update.completedUnits,update.totalUnits);}
+ fail(update:VideoRenderFailureUpdate){return this.transition(update,'failed');}
  private async reconcileCollision(contentScriptId:string,expectedManifestId:string,expectedInputHash:string){
   for(let attempt=0;attempt<10;attempt++){
    try{const established=await this.findByContentScriptId(contentScriptId);if(established){

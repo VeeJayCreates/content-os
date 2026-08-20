@@ -6,3 +6,7 @@ export interface VideoRenderInputManifest extends VideoRenderInputIdentity { id:
 export interface VideoRenderManifestIdentity { renderInputManifestId: string; renderInputHash: string; }
 export interface VideoRenderJobProgress { completedUnits: number; totalUnits: number; percent: number; }
 export interface VideoRenderJob extends VideoRenderManifestIdentity { id: string; projectId: string; contentScriptId: string; attemptId: string; attemptNumber: number; status: VideoRenderJobStatus; progress: VideoRenderJobProgress | null; failureCode: VideoRenderJobFailureCode | null; failureMessage: string | null; queuedAt: string; startedAt: string | null; completedAt: string | null; updatedAt: string; }
+export interface VideoRenderWorkerIdentity extends VideoRenderManifestIdentity { jobId: string; attemptId: string; }
+export interface VideoRenderProgressUpdate extends VideoRenderWorkerIdentity { completedUnits: number; totalUnits: number; }
+export interface VideoRenderCompletionUpdate extends VideoRenderWorkerIdentity { completedUnits: number; totalUnits: number; }
+export interface VideoRenderFailureUpdate extends VideoRenderWorkerIdentity { message?: string; }
