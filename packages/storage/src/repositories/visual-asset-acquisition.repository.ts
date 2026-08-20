@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, or } from 'drizzle-orm';
 
 import { db } from '../db.js';
 import { visualAssetAcquisitionPlans, visualAssetAcquisitionRuns } from '../schema/visual-asset-acquisition.js';
@@ -67,11 +67,9 @@ export class VisualAssetAcquisitionRepository {
   async recordExecution(id: string, counts: { providerRequestCount: number; candidatesDiscovered: number; candidatesAccepted: number; candidatesRejected: number }) {
     const timestamp = now();
     await db.update(visualAssetAcquisitionRuns).set({
-      providerRequestCount: sql`${visualAssetAcquisitionRuns.providerRequestCount} + ${counts.providerRequestCount}`,
-      candidatesDiscovered: sql`${visualAssetAcquisitionRuns.candidatesDiscovered} + ${counts.candidatesDiscovered}`,
-      candidatesAccepted: sql`${visualAssetAcquisitionRuns.candidatesAccepted} + ${counts.candidatesAccepted}`,
-      candidatesRejected: sql`${visualAssetAcquisitionRuns.candidatesRejected} + ${counts.candidatesRejected}`,
+      ...counts,
       status: 'completed',
+      failureCode: null,
       completedAt: timestamp,
       updatedAt: timestamp,
     }).where(and(eq(visualAssetAcquisitionRuns.id, id), eq(visualAssetAcquisitionRuns.status, 'executing')));
@@ -79,14 +77,24 @@ export class VisualAssetAcquisitionRepository {
   }
 
   async claimExecution(id: string) {
-    const result = await db.update(visualAssetAcquisitionRuns).set({ status: 'executing', updatedAt: now(), completedAt: null })
-      .where(and(eq(visualAssetAcquisitionRuns.id, id), eq(visualAssetAcquisitionRuns.status, 'prepared')));
+    const timestamp = now();
+    const result = await db.update(visualAssetAcquisitionRuns).set({ status: 'executing', failureCode: null, providerRequestCount: 0, candidatesDiscovered: 0, candidatesAccepted: 0, candidatesRejected: 0, startedAt: timestamp, updatedAt: timestamp, completedAt: null })
+      .where(and(
+        eq(visualAssetAcquisitionRuns.id, id),
+        or(
+          eq(visualAssetAcquisitionRuns.status, 'prepared'),
+          and(
+            eq(visualAssetAcquisitionRuns.status, 'failed'),
+            inArray(visualAssetAcquisitionRuns.failureCode, ['provider_unavailable', 'provider_network_failure', 'provider_http_rejected', 'provider_response_malformed', 'execution_failed']),
+          ),
+        ),
+      ));
     return result.changes === 1;
   }
 
-  async failExecution(id: string, failureCode: string) {
+  async failExecution(id: string, failureCode: string, counts?: { providerRequestCount: number; candidatesDiscovered: number; candidatesAccepted: number; candidatesRejected: number }) {
     const timestamp = now();
-    await db.update(visualAssetAcquisitionRuns).set({ status: 'failed', failureCode, completedAt: timestamp, updatedAt: timestamp })
+    await db.update(visualAssetAcquisitionRuns).set({ status: 'failed', failureCode, ...(counts ?? {}), completedAt: timestamp, updatedAt: timestamp })
       .where(and(eq(visualAssetAcquisitionRuns.id, id), eq(visualAssetAcquisitionRuns.status, 'executing')));
   }
 

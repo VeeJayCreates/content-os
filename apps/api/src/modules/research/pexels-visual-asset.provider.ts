@@ -1,7 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { VisualAssetProviderCapability } from '@content-os/contracts';
 
-import type { VisualAssetAcquisitionProvider, VisualAssetProviderSearchRequest } from './visual-asset-acquisition-provider.registry';
+import { VisualAssetProviderError, type VisualAssetAcquisitionProvider, type VisualAssetProviderSearchRequest } from './visual-asset-acquisition-provider.registry';
 
 type FetchLike = typeof fetch;
 
@@ -21,17 +21,21 @@ export class PexelsVisualAssetProvider implements VisualAssetAcquisitionProvider
   }
 
   async search(request: VisualAssetProviderSearchRequest): Promise<unknown[]> {
-    if (!this.enabled) throw new Error('provider_unavailable');
+    if (!this.enabled) throw new VisualAssetProviderError('provider_unavailable');
     const endpoint = request.mediaType === 'video' ? 'videos/search' : 'v1/search';
     const url = new URL(`https://api.pexels.com/${endpoint}`);
     url.searchParams.set('query', request.query);
     url.searchParams.set('per_page', String(Math.min(request.limit, this.resultLimit)));
     if (['landscape', 'portrait', 'square'].includes(request.orientation)) url.searchParams.set('orientation', request.orientation);
-    const response = await this.fetcher(url, { headers: { Authorization: this.apiKey }, signal: AbortSignal.timeout(10_000) });
-    if (!response.ok) throw new Error('provider_request_failed');
-    const body = await response.json() as any;
+    let response: Response;
+    try { response = await this.fetcher(url, { headers: { Authorization: this.apiKey }, signal: AbortSignal.timeout(10_000) }); }
+    catch { throw new VisualAssetProviderError('provider_network_failure'); }
+    if (!response.ok) throw new VisualAssetProviderError('provider_http_rejected');
+    let body: any;
+    try { body = await response.json(); }
+    catch { throw new VisualAssetProviderError('provider_response_malformed'); }
     const entries = request.mediaType === 'video' ? body?.videos : body?.photos;
-    if (!Array.isArray(entries)) throw new Error('provider_response_invalid');
+    if (!Array.isArray(entries)) throw new VisualAssetProviderError('provider_response_malformed');
     return entries.slice(0, request.limit).map((entry: any) => request.mediaType === 'video' ? this.video(entry) : this.image(entry));
   }
 

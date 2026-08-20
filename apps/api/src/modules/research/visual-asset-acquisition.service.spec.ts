@@ -7,6 +7,7 @@ jest.mock('@content-os/contracts', () => ({
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { VisualAssetAcquisitionProviderRegistry } from './visual-asset-acquisition-provider.registry';
 import { PexelsVisualAssetProvider } from './pexels-visual-asset.provider';
+import { VisualAssetProviderError } from './visual-asset-acquisition-provider.registry';
 import { normalizeProviderCandidate, normalizeQueries, planRequirement, safeHttpsUrl, safeResolvedHttpsUrl, VisualAssetAcquisitionService } from './visual-asset-acquisition.service';
 
 const requirement = (overrides = {}) => ({ id: 'req-1', plannedSceneId: 'scene-1', requirementType: 'stock_footage', acquisitionStrategy: 'provider_search', primarySearchQuery: ' India  France ', alternateSearchQueries: ['India France', ' India-France '], expectedMediaType: 'video', targetAspectRatio: '9:16', preferredOrientation: 'portrait', licenceRequirements: { commercialUseRequired: true, modificationAllowed: true, attributionRequired: false, provenanceRequired: true, unknownLicenceRequiresManualReview: true }, manualReviewRequired: false, reviewReasons: [], ...overrides });
@@ -127,12 +128,41 @@ describe('VisualAssetAcquisitionService', () => {
     expect(result).toMatchObject({ providerRequestCount: 1, candidatesDiscovered: 2, candidatesAccepted: 1, candidatesRejected: 1 });
   });
 
-  it('isolates provider failures and rejects stale execution inputs', async () => {
+  it('fails deterministically when every provider request fails and rejects stale execution inputs', async () => {
     const { service, manifests, runs } = setup();
     runs.findById.mockResolvedValue({ id: 'run-1', status: 'prepared', manifestId: 'manifest', manifestInputHash: 'manifest-hash', contentScriptId: 'script', providerPlan: persistedProviderPlan, plans: [{ ...planRequirement(requirement()), providerIds: ['provider-a'], queries: ['India France'] }] });
-    await expect(service.execute('run-1', [provider({ search: jest.fn().mockRejectedValue(new Error('secret response body')) })] as never)).resolves.toMatchObject({ providerRequestCount: 1, candidatesAccepted: 0 });
+    await expect(service.execute('run-1', [provider({ search: jest.fn().mockRejectedValue(new VisualAssetProviderError('provider_http_rejected')) })] as never)).rejects.toMatchObject({ response: expect.objectContaining({ code: 'provider_http_rejected' }) });
+    expect(runs.failExecution).toHaveBeenCalledWith('run-1', 'provider_http_rejected', { providerRequestCount: 1, candidatesDiscovered: 0, candidatesAccepted: 0, candidatesRejected: 0 });
     manifests.findByContentScriptId.mockResolvedValueOnce(manifest({ inputHash: 'changed' }));
     await expect(service.execute('run-1', [provider({ search: jest.fn() })] as never)).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('claims a compatible prepared run and persists unavailable Pexels configuration', async () => {
+    const { service, runs } = setup();
+    const unavailablePexels = new PexelsVisualAssetProvider('', jest.fn() as never);
+    runs.findById.mockResolvedValue({ id: 'run-1', status: 'prepared', manifestId: 'manifest', manifestInputHash: 'manifest-hash', contentScriptId: 'script', providerPlan: [{ id: 'pexels', version: 'v1', configurationIdentity: 'pexels-public-api-v1' }], plans: [{ ...planRequirement(requirement()), providerIds: ['pexels'], queries: ['India France'] }] });
+
+    await expect(service.execute('run-1', [unavailablePexels] as never)).rejects.toMatchObject({ response: expect.objectContaining({ code: 'provider_unavailable' }) });
+    expect(runs.claimExecution).toHaveBeenCalledWith('run-1');
+    expect(runs.failExecution).toHaveBeenCalledWith('run-1', 'provider_unavailable', { providerRequestCount: 1, candidatesDiscovered: 0, candidatesAccepted: 0, candidatesRejected: 0 });
+    expect(runs.recordExecution).not.toHaveBeenCalled();
+  });
+
+  it('reclaims a compatible failed run and completes valid zero-result responses', async () => {
+    const { service, runs } = setup();
+    runs.findById.mockResolvedValue({ id: 'run-1', status: 'failed', failureCode: 'provider_network_failure', manifestId: 'manifest', manifestInputHash: 'manifest-hash', contentScriptId: 'script', providerPlan: persistedProviderPlan, plans: [{ ...planRequirement(requirement()), providerIds: ['provider-a'], queries: ['India France'] }] });
+    await expect(service.execute('run-1', [provider()] as never)).resolves.toMatchObject({ providerRequestCount: 1, candidatesDiscovered: 0, candidatesAccepted: 0, candidatesRejected: 0 });
+    expect(runs.claimExecution).toHaveBeenCalledWith('run-1');
+    expect(runs.recordExecution).toHaveBeenCalledWith('run-1', { providerRequestCount: 1, candidatesDiscovered: 0, candidatesAccepted: 0, candidatesRejected: 0 });
+  });
+
+  it.each(['preparation_failed', 'unknown_failure'] as const)('rejects non-retryable failed runs with %s', async (failureCode) => {
+    const { service, runs } = setup();
+    runs.findById.mockResolvedValue({ id: 'run-1', status: 'failed', failureCode, manifestId: 'manifest', manifestInputHash: 'manifest-hash', contentScriptId: 'script', providerPlan: persistedProviderPlan, plans: [] });
+
+    await expect(service.execute('run-1', [provider()] as never)).rejects.toBeInstanceOf(ConflictException);
+    expect(runs.claimExecution).not.toHaveBeenCalled();
+    expect(runs.recordExecution).not.toHaveBeenCalled();
   });
 
   it('atomically claims execution and rejects malformed persisted guidance', async () => {
@@ -154,5 +184,14 @@ describe('VisualAssetAcquisitionService', () => {
     const results = await validated.search({ query: 'Delhi skyline', mediaType: 'image', orientation: 'landscape', limit: 3 }) as any[];
     expect(String(fetcher.mock.calls[0][0])).toContain('query=Delhi+skyline');
     expect(results[0]).toMatchObject({ provider: 'pexels', providerAssetId: '42', licenceType: null, commercialUseAllowed: null, modificationAllowed: null });
+  });
+
+  it.each([
+    ['unavailable configuration', new PexelsVisualAssetProvider('', jest.fn() as never), 'provider_unavailable'],
+    ['network failure', new PexelsVisualAssetProvider('key', jest.fn().mockRejectedValue(new Error('secret')) as never), 'provider_network_failure'],
+    ['rejected HTTP response', new PexelsVisualAssetProvider('key', jest.fn().mockResolvedValue({ ok: false }) as never), 'provider_http_rejected'],
+    ['malformed response', new PexelsVisualAssetProvider('key', jest.fn().mockResolvedValue({ ok: true, json: async () => ({ photos: null }) }) as never), 'provider_response_malformed'],
+  ])('maps Pexels %s to a bounded failure code', async (_case, adapter, code) => {
+    await expect(adapter.search({ query: 'safe', mediaType: 'image', orientation: 'portrait', limit: 1 })).rejects.toMatchObject({ code });
   });
 });

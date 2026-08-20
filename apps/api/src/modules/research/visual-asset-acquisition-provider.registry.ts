@@ -20,6 +20,21 @@ export interface VisualAssetProviderSearchRequest {
   limit: number;
 }
 
+export const VISUAL_ASSET_PROVIDER_FAILURE_CODES = [
+  'provider_unavailable',
+  'provider_network_failure',
+  'provider_http_rejected',
+  'provider_response_malformed',
+] as const;
+export type VisualAssetProviderFailureCode = typeof VISUAL_ASSET_PROVIDER_FAILURE_CODES[number];
+
+export class VisualAssetProviderError extends Error {
+  constructor(readonly code: VisualAssetProviderFailureCode) {
+    super(code);
+    this.name = 'VisualAssetProviderError';
+  }
+}
+
 @Injectable()
 export class VisualAssetAcquisitionProviderRegistry {
   validate(providers: VisualAssetAcquisitionProvider[]) {

@@ -2,15 +2,23 @@ import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import ipaddr from 'ipaddr.js';
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { VisualAssetManifestStatus, VisualAssetProviderCapability, type VisualAssetAcquisitionPlan } from '@content-os/contracts';
 import { VisualAssetAcquisitionRepository, VisualAssetRepository } from '@content-os/storage';
 
-import { VisualAssetAcquisitionProviderRegistry, type VisualAssetAcquisitionProvider } from './visual-asset-acquisition-provider.registry';
+import { VisualAssetAcquisitionProviderRegistry, VisualAssetProviderError, type VisualAssetAcquisitionProvider, type VisualAssetProviderFailureCode } from './visual-asset-acquisition-provider.registry';
 
 export const VISUAL_ASSET_ACQUISITION_VERSION = 'visual-asset-acquisition-v1';
 export const QUERY_STRATEGY_VERSION = 'visual-asset-query-v1';
 export type { VisualAssetAcquisitionProvider } from './visual-asset-acquisition-provider.registry';
+
+const RETRYABLE_EXECUTION_FAILURE_CODES = new Set([
+  'provider_unavailable',
+  'provider_network_failure',
+  'provider_http_rejected',
+  'provider_response_malformed',
+  'execution_failed',
+]);
 
 const normalize = (value: string) => value.replace(/\s+/g, ' ').replace(/[\u2013\u2014]/g, '-').trim();
 
@@ -115,10 +123,11 @@ export class VisualAssetAcquisitionService {
       const run: any = await this.runs.findById(runId);
       if (!run) throw new NotFoundException('Visual asset acquisition run not found');
       if (expectedContentScriptId && run.contentScriptId !== expectedContentScriptId) throw new NotFoundException('Visual asset acquisition run not found');
-      if (run.status !== 'prepared') throw new ConflictException('Visual asset acquisition run is not eligible for execution');
+      const retryableFailure = run.status === 'failed' && RETRYABLE_EXECUTION_FAILURE_CODES.has(run.failureCode);
+      if (run.status !== 'prepared' && !retryableFailure) throw new ConflictException('Visual asset acquisition run is not eligible for execution');
       const manifest: any = await this.manifests.findByContentScriptId(run.contentScriptId);
       if (!manifest || manifest.id !== run.manifestId || manifest.inputHash !== run.manifestInputHash || manifest.status === VisualAssetManifestStatus.STALE) throw new ConflictException('Visual asset acquisition inputs are stale');
-      const configured = new Map(this.registry.enabled(this.registry.validate(providers)).map((provider) => [provider.id, provider]));
+      const configured = new Map(this.registry.validate(providers).map((provider) => [provider.id, provider]));
       const preparedProviders = new Map((Array.isArray(run.providerPlan) ? run.providerPlan : []).map((provider: any) => [provider.id, provider]));
       for (const plan of run.plans) {
         const requirement = manifest.requirements.find((item: any) => item.id === plan.requirementId && item.plannedSceneId === plan.plannedSceneId);
@@ -133,7 +142,8 @@ export class VisualAssetAcquisitionService {
       }
       if (!await this.runs.claimExecution(run.id)) throw new ConflictException('Visual asset acquisition run is not eligible for execution');
       claimed = true;
-      let providerRequestCount = 0; let candidatesDiscovered = 0; let candidatesAccepted = 0; let candidatesRejected = 0;
+      let providerRequestCount = 0; let successfulProviderRequests = 0; let candidatesDiscovered = 0; let candidatesAccepted = 0; let candidatesRejected = 0;
+      const providerFailures = new Set<VisualAssetProviderFailureCode>();
       for (const plan of run.plans) {
         if (!plan.automaticAcquisitionAllowed || !plan.providerIds.length || !plan.queries.length) continue;
         const requirement = manifest.requirements.find((item: any) => item.id === plan.requirementId && item.plannedSceneId === plan.plannedSceneId);
@@ -145,8 +155,9 @@ export class VisualAssetAcquisitionService {
             providerRequestCount++;
             let results: unknown[];
             try { results = await provider.search({ query, mediaType: plan.expectedMediaType, orientation: plan.preferredOrientation, limit: plan.resultLimit }); }
-            catch { continue; }
-            if (!Array.isArray(results)) continue;
+            catch (error) { providerFailures.add(error instanceof VisualAssetProviderError ? error.code : 'provider_network_failure'); continue; }
+            if (!Array.isArray(results)) { providerFailures.add('provider_response_malformed'); continue; }
+            successfulProviderRequests++;
             candidatesDiscovered += results.length;
             for (const result of results) {
               const candidate = await normalizeProviderCandidate(requirement, result);
@@ -156,6 +167,12 @@ export class VisualAssetAcquisitionService {
             }
           }
         }
+      }
+      if (providerRequestCount > 0 && successfulProviderRequests === 0) {
+        const failureCode = (['provider_unavailable', 'provider_network_failure', 'provider_http_rejected', 'provider_response_malformed'] as const).find((code) => providerFailures.has(code)) ?? 'provider_network_failure';
+        await this.runs.failExecution(run.id, failureCode, { providerRequestCount, candidatesDiscovered, candidatesAccepted, candidatesRejected });
+        claimed = false;
+        throw new ServiceUnavailableException({ statusCode: 503, error: 'Service Unavailable', code: failureCode, message: 'Visual asset provider request failed' });
       }
       return this.runs.recordExecution(run.id, { providerRequestCount, candidatesDiscovered, candidatesAccepted, candidatesRejected });
     } catch (error) {

@@ -57,8 +57,24 @@ try {
   await repository.persistFailure(run({ inputHash: 'failed-input' }), 'preparation_failed');
   const failed = control.prepare(`SELECT * FROM visual_asset_acquisition_runs WHERE input_hash = 'failed-input'`).get();
   assert.equal(failed.status, 'failed'); assert.equal(control.prepare(`SELECT COUNT(*) AS count FROM visual_asset_acquisition_plans WHERE run_id = ?`).get(failed.id).count, 0);
+  assert.equal(await repository.claimExecution(failed.id), false);
   const retry = await repository.upsertPrepared(run({ inputHash: 'failed-input' }), [plan('requirement-a')]);
   assert.equal(retry.status, 'prepared'); assert.equal(retry.plans.length, 1);
+  await manifests.upsert({ projectId: 'project-a', contentScriptId: 'script-a', scenePlanId: 'scene-plan-a', scenePlanInputHash: 'scene-plan-hash', manifestVersion: 'v1', inputHash: 'manifest-hash-a', status: 'needs_review', failureCode: null, failureReason: null, completedAt: null }, [{ id: 'requirement-a', plannedSceneId: 'scene-a', requirementVersion: 'v1', requirementType: 'stock_footage', acquisitionStrategy: 'provider_search', subject: null, explicitEntities: [], explicitLocations: [], timeframe: null, eventOrClaim: null, visualObjective: 'objective', visualDescription: 'description', mustInclude: [], mustAvoid: [], primarySearchQuery: 'safe requirement-a', alternateSearchQueries: [], generationPrompt: null, sourceFactIds: [], targetDurationMs: 1000, targetAspectRatio: '9:16', preferredOrientation: 'portrait', expectedMediaType: 'video', licenceRequirements: {}, mapSpecification: null, programmaticSpecification: null, textCardSpecification: null, manualReviewRequired: false, reviewReasons: [], status: 'pending', selectedCandidateId: null }]);
+  assert.equal(await repository.claimExecution(retry.id), true);
+  const retryCandidate = { provider: 'provider-a', providerAssetId: 'asset-retry', sourceUrl: 'https://example.com/retry.mp4', previewUrl: null, mediaIdentity: null, mediaType: 'video', mimeType: 'video/mp4', width: 1080, height: 1920, durationMs: 1000, checksum: null, title: 'retry candidate', licenceType: null, licenceUrl: null, attributionText: null, commercialUseAllowed: null, modificationAllowed: null, provenanceScore: null, overallScore: null, rejectionReasons: [], status: 'discovered' };
+  const partiallyPersisted = await manifests.upsertCandidate('requirement-a', retryCandidate);
+  await repository.failExecution(retry.id, 'provider_network_failure', { providerRequestCount: 2, candidatesDiscovered: 1, candidatesAccepted: 1, candidatesRejected: 0 });
+  const executionFailure = await repository.findById(retry.id);
+  assert.equal(executionFailure.status, 'failed'); assert.equal(executionFailure.failureCode, 'provider_network_failure'); assert.equal(executionFailure.providerRequestCount, 2);
+  assert.equal(await repository.claimExecution(retry.id), true);
+  assert.equal(await repository.claimExecution(retry.id), false);
+  const rediscoveredOnRetry = await manifests.upsertCandidate('requirement-a', { ...retryCandidate, sourceUrl: 'https://example.com/retry-rediscovered.mp4' });
+  assert.equal(rediscoveredOnRetry.id, partiallyPersisted.id);
+  assert.equal(control.prepare(`SELECT COUNT(*) AS count FROM visual_asset_candidates WHERE requirement_id = 'requirement-a' AND provider = 'provider-a' AND provider_asset_id = 'asset-retry'`).get().count, 1);
+  await repository.recordExecution(retry.id, { providerRequestCount: 1, candidatesDiscovered: 1, candidatesAccepted: 1, candidatesRejected: 0 });
+  const completedRetry = await repository.findById(retry.id);
+  assert.equal(completedRetry.status, 'completed'); assert.equal(completedRetry.failureCode, null); assert.equal(completedRetry.providerRequestCount, 1); assert.equal(completedRetry.candidatesDiscovered, 1); assert.equal(completedRetry.candidatesAccepted, 1); assert.equal(completedRetry.candidatesRejected, 0);
   assert.equal(await repository.findByContentScriptId('script-b'), undefined);
 
   control.exec(`CREATE TRIGGER acquisition_plan_failure BEFORE INSERT ON visual_asset_acquisition_plans WHEN NEW.requirement_id = 'failure' BEGIN SELECT RAISE(ABORT, 'injected_plan_failure'); END;`);
