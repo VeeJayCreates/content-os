@@ -7,4 +7,7 @@ import { VideoRenderInputController } from './video-render-input.controller';
 import { VideoRenderInputService } from './video-render-input.service';
 import { VideoRenderJobController } from './video-render-job.controller';
 import { VideoRenderJobService } from './video-render-job.service';
-@Module({imports:[StorageModule,MediaModule],controllers:[VideoCompositionController,VideoRenderInputController,VideoRenderJobController],providers:[VideoCompositionService,VideoRenderInputService,VideoRenderJobService]}) export class VideoCompositionModule {}
+import { VideoRenderWorkerService } from './video-render-worker.service';
+import { FfmpegVideoRenderer } from './ffmpeg-video.renderer';
+import { VIDEO_RENDERER } from './video-renderer';
+@Module({imports:[StorageModule,MediaModule],controllers:[VideoCompositionController,VideoRenderInputController,VideoRenderJobController],providers:[VideoCompositionService,VideoRenderInputService,VideoRenderJobService,VideoRenderWorkerService,FfmpegVideoRenderer,{provide:VIDEO_RENDERER,useExisting:FfmpegVideoRenderer}],exports:[VideoRenderWorkerService]}) export class VideoCompositionModule {}

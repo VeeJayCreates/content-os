@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocalMediaStorageProvider } from './local-media-storage.provider';
@@ -16,5 +16,17 @@ describe('LocalMediaStorageProvider', () => {
   });
   it('does not allow keys to escape the configured root', async () => {
     await expect(new LocalMediaStorageProvider(root).exists('../escape')).resolves.toBe(false);
+  });
+  it('never replaces destination bytes when file publishers race or collide', async () => {
+    const provider = new LocalMediaStorageProvider(root); const key = 'video/ab/artifact.mp4';
+    const first = join(root, 'first.mp4'); const second = join(root, 'second.mp4');
+    await Promise.all([writeFile(first, 'first-artifact'), writeFile(second, 'second-artifact')]);
+    const results = await Promise.all([provider.materializeFile(key, first, 1024), provider.materializeFile(key, second, 1024)]);
+    expect(results.sort()).toEqual([false, true]);
+    const published = await readFile(join(root, ...key.split('/')), 'utf8');
+    expect(['first-artifact', 'second-artifact']).toContain(published);
+    const losingSource = published === 'first-artifact' ? second : first;
+    await expect(provider.materializeFile(key, losingSource, 1024)).resolves.toBe(false);
+    expect(await readFile(join(root, ...key.split('/')), 'utf8')).toBe(published);
   });
 });

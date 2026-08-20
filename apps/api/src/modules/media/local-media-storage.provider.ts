@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { createReadStream } from 'node:fs';
-import { access, mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { access, link, mkdir, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import { dirname, resolve, sep } from 'node:path';
+import { pipeline } from 'node:stream/promises';
+import { Transform } from 'node:stream';
 import type { MediaStorageProvider, MaterializeObject } from './media-storage-provider';
 
 @Injectable()
@@ -16,10 +19,17 @@ export class LocalMediaStorageProvider implements MediaStorageProvider {
   }
   async materialize({ storageKey, bytes }: MaterializeObject) {
     if (await this.exists(storageKey)) return false;
-    const finalPath = this.path(storageKey); const temporary = `${finalPath}.${process.pid}.${Date.now()}.tmp`;
+    const finalPath = this.path(storageKey); const temporary = `${finalPath}.${process.pid}.${randomUUID()}.tmp`;
     await mkdir(dirname(finalPath), { recursive: true });
-    try { await writeFile(temporary, bytes, { flag: 'wx' }); await rename(temporary, finalPath); return true; }
+    try { await writeFile(temporary, bytes, { flag: 'wx' }); await link(temporary, finalPath); await rm(temporary); return true; }
     catch (error) { await rm(temporary, { force: true }); if (await this.exists(storageKey)) return false; throw error; }
+  }
+  async materializeFile(storageKey: string, sourcePath: string, maxBytes: number) {
+    if (await this.exists(storageKey)) return false;
+    const finalPath = this.path(storageKey); const temporary = `${finalPath}.${process.pid}.${randomUUID()}.tmp`; let size=0;
+    await mkdir(dirname(finalPath), { recursive: true });
+    try { await pipeline(createReadStream(sourcePath),new Transform({transform(chunk,_encoding,callback){size+=chunk.length;callback(size>maxBytes?new Error('output_size_limit'):undefined,chunk);}}),createWriteStream(temporary,{flags:'wx'}));await link(temporary,finalPath);await rm(temporary);return true; }
+    catch(error){await rm(temporary,{force:true});if(await this.exists(storageKey))return false;throw error;}
   }
   async resolve(key: string) { if (!(await this.exists(key))) throw new Error('Media object not found'); return createReadStream(this.path(key)); }
   async exists(key: string) { try { await access(this.path(key)); return true; } catch { return false; } }
