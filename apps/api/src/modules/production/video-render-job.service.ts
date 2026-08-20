@@ -1,7 +1,7 @@
-import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import { VideoRenderInputManifestStatus, VideoRenderJobFailureCode } from '@content-os/contracts';
 import type { VideoRenderCompletionUpdate, VideoRenderFailureUpdate, VideoRenderProgressUpdate } from '@content-os/contracts';
-import { VideoRenderInputRepository, VideoRenderJobRepository, VideoRenderJobRepositoryError } from '@content-os/storage';
+import { isValidVideoRenderOutputArtifact, VideoRenderInputRepository, VideoRenderJobRepository, VideoRenderJobRepositoryError } from '@content-os/storage';
 import { VideoRenderInputService } from './video-render-input.service';
 
 @Injectable()
@@ -10,7 +10,11 @@ export class VideoRenderJobService{
  async find(contentScriptId:string){const job=await this.jobs.findByContentScriptId(contentScriptId);if(!job)throw new NotFoundException('Video render job not found');return job;}
  async claimNextQueued(){const job=await this.jobs.claimNextQueued();if(!job)throw new NotFoundException('No queued video render attempt');return job;}
  reportProgress(update:VideoRenderProgressUpdate){return this.jobs.reportProgress(update);}
- complete(update:VideoRenderCompletionUpdate){return this.jobs.complete(update);}
+ complete(update:VideoRenderCompletionUpdate){
+  const artifact=update?.outputArtifact;
+  if(!isValidVideoRenderOutputArtifact(artifact))throw new BadRequestException({code:'invalid_output_artifact',message:'Render output artifact metadata is invalid'});
+  return this.jobs.complete(update);
+ }
  fail(update:VideoRenderFailureUpdate){return this.jobs.fail(update);}
  async enqueue(contentScriptId:string,retry=false){
   const manifest=await this.manifests.findByContentScriptId(contentScriptId);
