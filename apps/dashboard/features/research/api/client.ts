@@ -23,6 +23,7 @@ import type {
   AudioGeneration,
   VisualAssetManifest,
   VisualAssetCandidate,
+  VisualAssetAcquisitionRun,
   UpdateResearchSourceInput,
 } from "@content-os/contracts";
 
@@ -331,6 +332,28 @@ export function prepareVisualAssetManifest(contentScriptId: string) {
 }
 export function getVisualAssetManifest(contentScriptId: string) {
   return requestUrl<VisualAssetManifest>(visualAssetPath(contentScriptId));
+}
+const visualAssetAcquisitionPath = (contentScriptId: string) =>
+  `${visualAssetPath(contentScriptId)}/visual-asset-acquisitions`;
+export function prepareVisualAssetAcquisition(contentScriptId: string) {
+  return requestUrl<VisualAssetAcquisitionRun>(
+    visualAssetAcquisitionPath(contentScriptId),
+    { method: "POST" },
+  );
+}
+export function getLatestVisualAssetAcquisition(contentScriptId: string) {
+  return requestUrl<VisualAssetAcquisitionRun>(
+    `${visualAssetAcquisitionPath(contentScriptId)}/latest`,
+  );
+}
+export function executeVisualAssetAcquisition(
+  contentScriptId: string,
+  runId: string,
+) {
+  return requestUrl<VisualAssetAcquisitionRun>(
+    `${visualAssetAcquisitionPath(contentScriptId)}/${encodeURIComponent(runId)}/execute`,
+    { method: "POST" },
+  );
 }
 export function listVisualAssetCandidates(
   contentScriptId: string,

@@ -4,13 +4,23 @@ import * as React from "react";
 import type {
   SceneVisualRequirement,
   VisualAssetCandidate,
+  VisualAssetAcquisitionRun,
   VisualAssetManifest,
 } from "@content-os/contracts";
 import { Button } from "@/components/ui/button";
 import {
+  acquisitionActions,
+  performAcquisitionAction,
+} from "./visual-asset-acquisition-state";
+import { VisualAssetAcquisitionView } from "./visual-asset-acquisition-view";
+import {
   clearVisualAssetCandidateSelection,
   finalizeVisualAssetManifest,
+  getLatestVisualAssetAcquisition,
   listVisualAssetCandidates,
+  executeVisualAssetAcquisition,
+  prepareVisualAssetAcquisition,
+  ResearchApiError,
   rejectVisualAssetCandidate,
   selectVisualAssetCandidate,
   upsertVisualAssetCandidate,
@@ -113,7 +123,13 @@ export function VisualAssetManifestPanel({
     Record<string, VisualAssetCandidateInput>
   >({});
   const [action, setAction] = React.useState<string | null>(null);
+  const actionRef = React.useRef<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [acquisition, setAcquisition] =
+    React.useState<VisualAssetAcquisitionRun | null>(null);
+  const [acquisitionLoading, setAcquisitionLoading] = React.useState(true);
+  const [acquisitionStatusAvailable, setAcquisitionStatusAvailable] =
+    React.useState(false);
   const mounted = React.useRef(true);
   const requests = React.useRef<Record<string, number>>({});
   React.useEffect(
@@ -150,8 +166,38 @@ export function VisualAssetManifestPanel({
         void load(requirement.id);
       });
   }, [expanded, load, manifest.requirements]);
+  const loadAcquisition = React.useCallback(async () => {
+    setAcquisitionLoading(true);
+    try {
+      const value = await getLatestVisualAssetAcquisition(contentScriptId);
+      if (mounted.current) {
+        setAcquisition(value);
+        setAcquisitionStatusAvailable(true);
+      }
+    } catch (reason) {
+      if (reason instanceof ResearchApiError && reason.status === 404) {
+        if (mounted.current) {
+          setAcquisition(null);
+          setAcquisitionStatusAvailable(true);
+        }
+      } else if (mounted.current) {
+        setAcquisitionStatusAvailable(false);
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Unable to load acquisition status.",
+        );
+      }
+    } finally {
+      if (mounted.current) setAcquisitionLoading(false);
+    }
+  }, [contentScriptId]);
+  React.useEffect(() => {
+    void loadAcquisition();
+  }, [loadAcquisition]);
   const mutate = async (key: string, operation: () => Promise<unknown>) => {
-    if (action) return;
+    if (actionRef.current) return;
+    actionRef.current = key;
     setAction(key);
     setError(null);
     try {
@@ -165,6 +211,7 @@ export function VisualAssetManifestPanel({
             : "Visual Asset action failed.",
         );
     } finally {
+      actionRef.current = null;
       if (mounted.current) setAction(null);
     }
   };
@@ -173,6 +220,47 @@ export function VisualAssetManifestPanel({
       requirement.selectedCandidateId ||
       requirement.acquisitionStrategy === "none_required",
   ).length;
+  const allowed = acquisitionActions(
+    manifest.status,
+    acquisition,
+    acquisitionStatusAvailable,
+  );
+  const runAcquisition = async (mode: "prepare" | "execute") => {
+    if (
+      actionRef.current ||
+      (mode === "prepare" ? !allowed.prepare : !allowed.execute)
+    )
+      return;
+    const key =
+      mode === "prepare" ? "prepare-acquisition" : "execute-acquisition";
+    actionRef.current = key;
+    setAction(key);
+    setError(null);
+    try {
+      const value = await performAcquisitionAction(
+        mode,
+        contentScriptId,
+        acquisition?.id ?? null,
+        manifest.requirements.map((requirement) => requirement.id),
+        {
+          prepare: prepareVisualAssetAcquisition,
+          execute: executeVisualAssetAcquisition,
+        },
+        onMutation,
+        load,
+      );
+      if (mounted.current) setAcquisition(value);
+    } catch (reason) {
+      if (mounted.current)
+        setError(
+          reason instanceof Error ? reason.message : "Acquisition action failed.",
+        );
+      await loadAcquisition();
+    } finally {
+      actionRef.current = null;
+      if (mounted.current) setAction(null);
+    }
+  };
   return (
     <section
       className="space-y-2 rounded border p-3"
@@ -212,6 +300,18 @@ export function VisualAssetManifestPanel({
           Recalculate Readiness
         </Button>
       </div>
+      <VisualAssetAcquisitionView
+        acquisition={acquisition}
+        loading={acquisitionLoading}
+        statusAvailable={acquisitionStatusAvailable}
+        pending={pending}
+        action={action}
+        canPrepare={allowed.prepare}
+        canExecute={allowed.execute}
+        onPrepare={() => void runAcquisition("prepare")}
+        onExecute={() => void runAcquisition("execute")}
+        ButtonComponent={Button}
+      />
       {manifest.failureReason ? (
         <p role="status" className="text-amber-600">
           {manifest.failureReason}
