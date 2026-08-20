@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
-import { lookup } from 'node:dns/promises';
-import { isIP } from 'node:net';
-import ipaddr from 'ipaddr.js';
 import { ConflictException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { VisualAssetManifestStatus, VisualAssetProviderCapability, type VisualAssetAcquisitionPlan } from '@content-os/contracts';
 import { VisualAssetAcquisitionRepository, VisualAssetRepository } from '@content-os/storage';
 
 import { VisualAssetAcquisitionProviderRegistry, VisualAssetProviderError, type VisualAssetAcquisitionProvider, type VisualAssetProviderFailureCode } from './visual-asset-acquisition-provider.registry';
+import { safeHttpsUrl, safeResolvedHttpsUrl, type AddressResolver } from '../../common/public-network-url';
+
+export { safeHttpsUrl, safeResolvedHttpsUrl } from '../../common/public-network-url';
 
 export const VISUAL_ASSET_ACQUISITION_VERSION = 'visual-asset-acquisition-v1';
 export const QUERY_STRATEGY_VERSION = 'visual-asset-query-v1';
@@ -22,37 +22,6 @@ const RETRYABLE_EXECUTION_FAILURE_CODES = new Set([
 
 const normalize = (value: string) => value.replace(/\s+/g, ' ').replace(/[\u2013\u2014]/g, '-').trim();
 
-const additionalNonGlobalCidrs = ['100::/64', '2001:2::/48', '3fff::/20'].map(ipaddr.parseCIDR);
-const isGlobalAddress = (host: string) => {
-  try {
-    const address = ipaddr.parse(host);
-    return address.range() === 'unicast' && !additionalNonGlobalCidrs.some(([network, prefix]) => {
-      if (address.kind() === 'ipv4' && network.kind() === 'ipv4') return (address as ipaddr.IPv4).match(network as ipaddr.IPv4, prefix);
-      if (address.kind() === 'ipv6' && network.kind() === 'ipv6') return (address as ipaddr.IPv6).match(network as ipaddr.IPv6, prefix);
-      return false;
-    });
-  } catch { return false; }
-};
-
-export const safeHttpsUrl = (value: string | null | undefined) => {
-  if (!value) return false;
-  try {
-    const url = new URL(value); const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-    const ipVersion = isIP(host);
-    return url.protocol === 'https:' && !url.username && !url.password && host !== 'localhost' &&
-      (ipVersion === 0 || isGlobalAddress(host));
-  } catch { return false; }
-};
-type AddressResolver = (hostname: string) => Promise<Array<{ address: string }>>;
-export const safeResolvedHttpsUrl = async (value: string | null | undefined, resolver: AddressResolver = (hostname) => lookup(hostname, { all: true, verbatim: true })) => {
-  if (!safeHttpsUrl(value)) return false;
-  const host = new URL(value!).hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (isIP(host)) return isGlobalAddress(host);
-  try {
-    const addresses = await resolver(host);
-    return addresses.length > 0 && addresses.every(({ address }) => isGlobalAddress(address));
-  } catch { return false; }
-};
 export const normalizeQueries = (primary: string | null, alternates: string[], max = 4) => [...new Set([primary, ...alternates].filter((item): item is string => Boolean(item)).map(normalize).filter((item) => item.length > 0 && item.length <= 300))].slice(0, max);
 export const planRequirement = (requirement: any, limit = 10): VisualAssetAcquisitionPlan => {
   const search = ['provider_search', 'source_reference', 'reusable_template'].includes(requirement.acquisitionStrategy);

@@ -52,6 +52,10 @@ export class VisualAssetRepository {
     return (await db.select().from(visualAssetCandidates).where(eq(visualAssetCandidates.id, id)))[0];
   }
 
+  async getRequirementForMaterialization(requirementId: string) {
+    return (await db.select().from(sceneVisualRequirements).where(eq(sceneVisualRequirements.id, requirementId)))[0];
+  }
+
   async upsert(data: ManifestInsert, requirements: RequirementInsert[]) {
     const timestamp = now();
     db.transaction((tx) => {
