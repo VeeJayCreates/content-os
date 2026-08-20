@@ -10,7 +10,7 @@ describe('MediaMaterializationService', () => {
   const requirement = { id: 'req', selectedCandidateId: 'candidate', expectedMediaType: 'image', manualReviewRequired: false, licenceRequirements: { commercialUseRequired: true, modificationAllowed: true, attributionRequired: false, provenanceRequired: true, unknownLicenceRequiresManualReview: true } };
   const candidate = { id: 'candidate', requirementId: 'req', status: 'selected', sourceUrl: 'https://8.8.8.8/image', provider: 'pexels', providerAssetId: '42', mediaIdentity: 'pexels:42', mediaType: 'image', mimeType: 'image/png', checksum: null, licenceType: 'pexels', commercialUseAllowed: true, modificationAllowed: true };
   const visuals = { getRequirementForMaterialization: jest.fn(), getCandidate: jest.fn() };
-  const assets = { findReadyBySourceChecksum: jest.fn(), createReady: jest.fn() };
+  const assets = { findById: jest.fn(), findReadyBySourceChecksum: jest.fn(), createReady: jest.fn() };
   const storage = { id: 'local', materialize: jest.fn(), resolve: jest.fn(), exists: jest.fn(), remove: jest.fn() };
   const fetcher = jest.fn();
   const service = (options: Record<string, unknown> = {}) => new MediaMaterializationService(visuals as never, assets as never, storage as never, { fetcher, ...options });
@@ -148,6 +148,16 @@ describe('MediaMaterializationService', () => {
     storage.exists.mockResolvedValue(false); assets.createReady.mockResolvedValue({ ...existing, checksum: expectedChecksum });
     await expect(service().materialize('req', 'candidate')).resolves.toMatchObject({ id: 'ma_existing' });
     expect(storage.materialize).toHaveBeenCalled();
+  });
+  it('does not reuse a ready row when its stored object is missing', async () => {
+    assets.findById.mockResolvedValue({ id: 'ma_missing', status: 'ready', requirementId: 'req', sourceId: 'candidate', mediaType: 'image', storageProvider: 'local', storageKey: 'image/missing.png' });
+    storage.exists.mockResolvedValue(false);
+    await expect(service().findCompatibleReadyAsset('req', 'candidate', 'ma_missing')).resolves.toBeUndefined();
+  });
+  it('does not reuse a ready row whose media type conflicts with the requirement', async () => {
+    assets.findById.mockResolvedValue({ id: 'ma_video', status: 'ready', requirementId: 'req', sourceId: 'candidate', mediaType: 'video', storageProvider: 'local', storageKey: 'video/file.mp4' });
+    await expect(service().findCompatibleReadyAsset('req', 'candidate', 'ma_video')).resolves.toBeUndefined();
+    expect(storage.exists).not.toHaveBeenCalled();
   });
   it('does not remove shared content-addressed bytes when one concurrent metadata write fails', async () => {
     assets.createReady.mockRejectedValueOnce(new Error('database failed')).mockImplementationOnce(async (value) => value);

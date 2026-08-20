@@ -35,6 +35,13 @@ try {
   const scenes = [0,1].map(index => ({ plannedSceneId:`scene-${index}`,audioSegmentId:`audio-${index}`,audioStartMs:index*1000,audioEndMs:(index+1)*1000,audioDurationMs:1000,visualRequirementId:`requirement-${index}`,visualRequirementType:'stock_footage',assetStrategy:'selected_candidate',selectedCandidateId:`candidate-${index}`,candidateIdentityHash:`candidate-hash-${index}` }));
   const first = await repository.upsert(identity, scenes);
   assert.deepEqual(first.scenes.map(scene => scene.sceneIndex), [0,1]);
+  assert.equal(await repository.bindMediaAsset(first.scenes[0].id,'candidate-0','candidate-hash-0','media-0'),true);
+  assert.equal((await repository.findByContentScriptId('script')).scenes[0].mediaAssetId,'media-0');
+  assert.equal(await repository.bindMediaAsset(first.scenes[0].id,'candidate-0','candidate-hash-0','media-overwrite'),false);
+  assert.equal((await repository.findByContentScriptId('script')).scenes[0].mediaAssetId,'media-0');
+  assert.equal(await repository.bindMediaAsset(first.scenes[0].id,'stale-candidate','candidate-hash-0','media-stale'),false);
+  assert.equal(await repository.bindMediaAsset(first.scenes[0].id,'candidate-0','stale-hash','media-stale'),false);
+  assert.equal((await repository.findByContentScriptId('script')).scenes[0].mediaAssetId,'media-0');
   const replaced = await repository.upsert({ ...identity,audioInputHash:'audio-hash-2',inputHash:'input-2',sceneCount:1,totalDurationMs:1000 }, [scenes[0]]);
   assert.equal(replaced.id, first.id);assert.equal(replaced.inputHash, 'input-2');assert.equal(replaced.scenes.length, 1);
   assert.equal(control.prepare('SELECT count(*) count FROM video_composition_plans WHERE content_script_id=?').get('script').count, 1);

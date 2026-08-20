@@ -42,6 +42,22 @@ export class MediaMaterializationService {
     this.fetcher = options.fetcher ?? this.fetchPinned;
   }
 
+  async findCompatibleReadyAsset(requirementId: string, candidateId: string, assetId: string) {
+    const [requirement, candidate, asset] = await Promise.all([
+      this.visuals.getRequirementForMaterialization(requirementId),
+      this.visuals.getCandidate(candidateId),
+      this.assets.findById(assetId),
+    ]);
+    if (!requirement || !candidate || candidate.requirementId !== requirementId) return undefined;
+    const selected = requirement.selectedCandidateId === candidateId && candidate.status === 'selected';
+    if (!selected && candidate.status !== 'approved') return undefined;
+    if (!['image', 'video'].includes(candidate.mediaType) || candidate.mediaType !== requirement.expectedMediaType) return undefined;
+    if (!asset || asset.status !== 'ready' || asset.requirementId !== requirementId || asset.sourceId !== candidateId ||
+      asset.mediaType !== requirement.expectedMediaType || asset.mediaType !== candidate.mediaType ||
+      asset.storageProvider !== this.storage.id || !await this.storage.exists(asset.storageKey)) return undefined;
+    return asset;
+  }
+
   async materialize(requirementId: string, candidateId: string) {
     const [requirement, candidate] = await Promise.all([this.visuals.getRequirementForMaterialization(requirementId), this.visuals.getCandidate(candidateId)]);
     if (!requirement || !candidate || candidate.requirementId !== requirementId) throw new Error('Visual candidate not found');
