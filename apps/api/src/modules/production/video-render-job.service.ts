@@ -1,13 +1,28 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
-import { VideoRenderInputManifestStatus, VideoRenderJobFailureCode } from '@content-os/contracts';
+import { BadGatewayException, BadRequestException, ConflictException, Inject, Injectable, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { VideoRenderInputManifestStatus, VideoRenderJobFailureCode, VideoRenderJobStatus } from '@content-os/contracts';
 import type { VideoRenderCompletionUpdate, VideoRenderFailureUpdate, VideoRenderProgressUpdate } from '@content-os/contracts';
 import { isValidVideoRenderOutputArtifact, VideoRenderInputRepository, VideoRenderJobRepository, VideoRenderJobRepositoryError } from '@content-os/storage';
 import { VideoRenderInputService } from './video-render-input.service';
+import { MEDIA_STORAGE_PROVIDER, type MediaStorageProvider } from '../media/media-storage-provider';
 
 @Injectable()
 export class VideoRenderJobService{
- constructor(private readonly manifests:VideoRenderInputRepository,private readonly jobs:VideoRenderJobRepository,private readonly renderInputs:VideoRenderInputService){}
+ constructor(private readonly manifests:VideoRenderInputRepository,private readonly jobs:VideoRenderJobRepository,private readonly renderInputs:VideoRenderInputService,@Inject(MEDIA_STORAGE_PROVIDER) private readonly storage:MediaStorageProvider){}
  async find(contentScriptId:string){const job=await this.jobs.findByContentScriptId(contentScriptId);if(!job)throw new NotFoundException('Video render job not found');return job;}
+ async output(contentScriptId:string){
+  const job=await this.jobs.findByContentScriptId(contentScriptId);
+  if(!job)throw new NotFoundException({code:'video_render_job_not_found',message:'Video render job not found'});
+  if(job.status!==VideoRenderJobStatus.COMPLETED)throw new ConflictException({code:'video_render_output_not_ready',message:'Video render output is not available for the current job'});
+  const manifest=await this.manifests.findByContentScriptId(contentScriptId);
+  if(!manifest||manifest.status!==VideoRenderInputManifestStatus.READY||manifest.id!==job.renderInputManifestId||manifest.inputHash!==job.renderInputHash||!await this.renderInputs.isCurrent(manifest))throw new ConflictException({code:VideoRenderJobFailureCode.RENDER_INPUT_STALE,message:'Video render output render-input identity is stale'});
+  const artifact=job.outputArtifact;
+  if(!artifact||!isValidVideoRenderOutputArtifact(artifact))throw new NotFoundException({code:'video_render_output_missing',message:'Completed video render output artifact is missing'});
+  if(artifact.storageProvider!==this.storage.id)throw new BadGatewayException({code:'video_render_storage_unavailable',message:'Video render storage provider is unavailable'});
+  let exists:boolean;
+  try{exists=await this.storage.exists(artifact.storageKey);}catch{throw new BadGatewayException({code:'video_render_storage_failure',message:'Video render storage lookup failed'});}
+  if(!exists)throw new NotFoundException({code:'video_render_output_missing',message:'Stored video render output was not found'});
+  try{return {stream:await this.storage.resolve(artifact.storageKey),mimeType:artifact.mimeType,sizeBytes:artifact.sizeBytes};}catch{throw new BadGatewayException({code:'video_render_storage_failure',message:'Video render storage read failed'});}
+ }
  async claimNextQueued(){const job=await this.jobs.claimNextQueued();if(!job)throw new NotFoundException('No queued video render attempt');return job;}
  reportProgress(update:VideoRenderProgressUpdate){return this.jobs.reportProgress(update);}
  complete(update:VideoRenderCompletionUpdate){
