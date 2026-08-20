@@ -29,6 +29,13 @@
       "when": 1787232600000,
       "tag": "0003_video_composition_media_binding",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1787236200000,
+      "tag": "0004_video_render_input_manifest",
+      "breakpoints": true
     }
   ]
 }

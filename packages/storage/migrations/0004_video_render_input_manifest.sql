@@ -1,0 +1,7 @@
+CREATE TABLE `video_render_input_manifests` (`id` text PRIMARY KEY NOT NULL,`project_id` text NOT NULL,`content_script_id` text NOT NULL,`composition_plan_id` text NOT NULL,`composition_input_hash` text NOT NULL,`audio_generation_id` text NOT NULL,`audio_input_hash` text NOT NULL,`visual_asset_manifest_id` text NOT NULL,`visual_manifest_input_hash` text NOT NULL,`version` text NOT NULL,`input_hash` text NOT NULL,`status` text NOT NULL,`audio_output_path` text,`total_duration_ms` integer NOT NULL,`scene_count` integer NOT NULL,`failure_code` text,`failure_reason` text,`created_at` text NOT NULL,`updated_at` text NOT NULL);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `video_render_manifests_script_unique` ON `video_render_input_manifests` (`content_script_id`);
+--> statement-breakpoint
+CREATE TABLE `video_render_scene_inputs` (`id` text PRIMARY KEY NOT NULL,`manifest_id` text NOT NULL,`scene_index` integer NOT NULL,`composition_scene_id` text NOT NULL,`planned_scene_id` text NOT NULL,`start_ms` integer NOT NULL,`end_ms` integer NOT NULL,`duration_ms` integer NOT NULL,`audio_segment_id` text NOT NULL,`audio_path` text NOT NULL,`asset_strategy` text NOT NULL,`selected_candidate_id` text,`candidate_identity_hash` text,`media_asset_id` text,`media_type` text,`mime_type` text,`storage_provider` text,`storage_key` text,`checksum` text);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `video_render_scene_inputs_manifest_index_unique` ON `video_render_scene_inputs` (`manifest_id`,`scene_index`);
