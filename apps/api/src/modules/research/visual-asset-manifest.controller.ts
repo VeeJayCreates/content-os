@@ -12,6 +12,7 @@ export class VisualAssetManifestController {
   @Get(':id/visual-asset-manifest') find(@Param('id', new ParseUUIDPipe()) id: string) { return this.service.find(id); }
   @Post(':id/visual-asset-manifest/finalize') finalize(@Param('id', new ParseUUIDPipe()) id: string) { return this.service.finalize(id); }
   @Post(':id/visual-asset-acquisitions') prepareAcquisition(@Param('id', new ParseUUIDPipe()) id: string) { return this.acquisition.prepare(id); }
+  @Get(':id/visual-asset-acquisitions/latest') findLatestAcquisition(@Param('id', new ParseUUIDPipe()) id: string) { return this.acquisition.findLatest(id); }
   @Post(':id/visual-asset-acquisitions/:runId/execute') executeAcquisition(@Param('id', new ParseUUIDPipe()) id: string, @Param('runId', new ParseUUIDPipe()) runId: string) { return this.acquisition.execute(id, runId); }
 
   @Get(':id/visual-asset-manifest/requirements/:requirementId/candidates')

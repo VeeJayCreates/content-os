@@ -19,11 +19,26 @@ describe('VisualAssetAcquisitionService', () => {
   const registry = new VisualAssetAcquisitionProviderRegistry();
   const setup = (overrides: any = {}) => {
     const manifests = { findByContentScriptId: jest.fn().mockResolvedValue(manifest()), upsertCandidate: jest.fn(async (_id, candidate) => ({ id: 'candidate', ...candidate })) };
-    const runs = { findCompatible: jest.fn().mockResolvedValue(undefined), findById: jest.fn(), claimExecution: jest.fn().mockResolvedValue(true), failExecution: jest.fn().mockResolvedValue(undefined), upsertPrepared: jest.fn(async (run, plans) => ({ id: 'run-1', ...run, status: 'prepared', plans })), persistFailure: jest.fn().mockResolvedValue(undefined), recordExecution: jest.fn(async (_id, counts) => counts) };
+    const runs = { findCompatible: jest.fn().mockResolvedValue(undefined), findByContentScriptId: jest.fn(), findById: jest.fn(), claimExecution: jest.fn().mockResolvedValue(true), failExecution: jest.fn().mockResolvedValue(undefined), upsertPrepared: jest.fn(async (run, plans) => ({ id: 'run-1', ...run, status: 'prepared', plans })), persistFailure: jest.fn().mockResolvedValue(undefined), recordExecution: jest.fn(async (_id, counts) => counts) };
     return { manifests, runs, service: new VisualAssetAcquisitionService(manifests as never, runs as never, registry), ...overrides };
   };
 
   it('normalizes bounded queries without inventing context', () => expect(normalizeQueries(' India  France ', ['India France', ' India  France '])).toEqual(['India France']));
+
+  it('reads the latest persisted run for only the requested content script', async () => {
+    const { service, runs } = setup();
+    const persisted = { id: 'run-1', contentScriptId: 'script-1', status: 'failed', failureCode: 'provider_unavailable', providerRequestCount: 2, plans: [{ requirementId: 'req-1' }] };
+    runs.findByContentScriptId.mockResolvedValue(persisted);
+
+    await expect(service.findLatest('script-1')).resolves.toBe(persisted);
+    expect(runs.findByContentScriptId).toHaveBeenCalledWith('script-1');
+  });
+
+  it('returns a deterministic not-found error when no acquisition run exists', async () => {
+    const { service } = setup();
+
+    await expect(service.findLatest('missing-script')).rejects.toMatchObject({ status: 404, message: 'Visual asset acquisition run not found' });
+  });
 
   it('routes internal and manual requirements away from external acquisition', () => {
     expect(planRequirement(requirement({ acquisitionStrategy: 'none_required' })).automaticAcquisitionAllowed).toBe(false);

@@ -87,6 +87,12 @@ export class VisualAssetAcquisitionService {
   private readonly executionInFlight = new Set<string>();
   constructor(private readonly manifests: VisualAssetRepository, private readonly runs: VisualAssetAcquisitionRepository, private readonly registry: VisualAssetAcquisitionProviderRegistry) {}
 
+  async findLatest(contentScriptId: string) {
+    const run = await this.runs.findByContentScriptId(contentScriptId);
+    if (!run) throw new NotFoundException('Visual asset acquisition run not found');
+    return run;
+  }
+
   async prepare(contentScriptId: string, providers: VisualAssetAcquisitionProvider[]) {
     if (this.inFlight.has(contentScriptId)) throw new ConflictException('Visual Asset acquisition preparation is already in progress');
     this.inFlight.add(contentScriptId);
