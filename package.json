@@ -8,6 +8,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "check-types": "turbo run check-types"
     ,"test:video-render-worker:integration": "node scripts/video-render-worker.integration.mjs",
+    "test:video-render-api:integration": "turbo run build --filter=api... && node scripts/video-render-api.integration.mjs",
     "test:api-bootstrap:smoke": "turbo run build --filter=api... && node scripts/api-bootstrap-smoke.mjs"
   },
   "devDependencies": {
