@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "check-types": "tsc -p tsconfig.json --noEmit",
-    "test": "node --experimental-strip-types --test features/research/components/*.test.ts features/agent-runtime/components/*.test.ts",
+    "test": "node --require ./test-node-preload.cjs ./node_modules/tsx/dist/cli.mjs --test features/research/components/*.test.ts features/agent-runtime/components/*.test.ts features/agent-runtime/components/*.test.tsx",
     "start": "next start",
     "lint": "eslint"
   },
@@ -33,6 +33,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.11",
     "typescript": "^5"
   },
   "packageManager": "pnpm@11.20.0"

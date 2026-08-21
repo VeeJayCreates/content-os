@@ -8,7 +8,7 @@ jest.mock('@content-os/storage', () => ({ AgentRuntimeRepository: class {} }));
 describe('AgentRuntimeService', () => {
   const now = '2026-08-21T00:00:00.000Z';
   const record = (status = 'queued') => ({ id: 'run-1', agentKey: 'research_agent', projectId: 'project-1', subjectType: 'opportunity', subjectId: 'opportunity-1', status, currentActivity: null, stateJson: '{"sourceCount":2}', startedAt: null, completedAt: null, createdAt: now, updatedAt: now });
-  const repository = { createRun: jest.fn(), findRuns: jest.fn(), findRunById: jest.fn(), findActivities: jest.fn(), updateState: jest.fn(), appendActivity: jest.fn() };
+  const repository = { createRun: jest.fn(), findRuns: jest.fn(), findOfficeRuns: jest.fn(), findRunById: jest.fn(), findActivities: jest.fn(), updateState: jest.fn(), appendActivity: jest.fn() };
   const service = () => new AgentRuntimeService(repository as never);
 
   beforeEach(() => jest.resetAllMocks());
@@ -18,6 +18,12 @@ describe('AgentRuntimeService', () => {
     await expect(service().create({ agentKey: 'research_agent', projectId: 'project-1', state: { sourceCount: 2 } })).resolves.toMatchObject({ status: AgentRunStatus.QUEUED, state: { sourceCount: 2 } });
     expect(repository.createRun).toHaveBeenCalledWith(expect.objectContaining({ stateJson: '{"sourceCount":2}' }));
     expect(repository.appendActivity).not.toHaveBeenCalled();
+  });
+
+  it('loads all persisted office runs for the bounded agent set without applying history pagination', async () => {
+    repository.findOfficeRuns.mockResolvedValue([record('running'), { ...record('failed'), id: 'older-failure' }]);
+    await expect(service().office(['research_agent', 'content_agent'])).resolves.toHaveLength(2);
+    expect(repository.findOfficeRuns).toHaveBeenCalledWith(['research_agent', 'content_agent']);
   });
 
   it('appends reported activity and returns persisted history', async () => {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../db.js';
 import { agentActivities, agentRuns, type AgentActivityRecord, type AgentRunRecord } from '../schema/agent-runtime.js';
 
@@ -20,6 +20,13 @@ export class AgentRuntimeRepository {
   async findRuns(filters: AgentRunFilters): Promise<AgentRunRecord[]> {
     const conditions = [filters.projectId ? eq(agentRuns.projectId, filters.projectId) : undefined, filters.agentKey ? eq(agentRuns.agentKey, filters.agentKey) : undefined, filters.status ? eq(agentRuns.status, filters.status) : undefined].filter((value): value is NonNullable<typeof value> => Boolean(value));
     return db.select().from(agentRuns).where(conditions.length ? and(...conditions) : undefined).orderBy(desc(agentRuns.updatedAt), desc(agentRuns.createdAt), desc(agentRuns.id)).limit(filters.limit ?? 50);
+  }
+
+  /** Authoritative room data is intentionally unpaged: callers pass the bounded office agent set. */
+  async findOfficeRuns(agentKeys: string[]): Promise<AgentRunRecord[]> {
+    if (!agentKeys.length) return [];
+    return db.select().from(agentRuns).where(inArray(agentRuns.agentKey, agentKeys))
+      .orderBy(desc(agentRuns.updatedAt), desc(agentRuns.createdAt), desc(agentRuns.id));
   }
 
   async findActivities(runId: string): Promise<AgentActivityRecord[]> {

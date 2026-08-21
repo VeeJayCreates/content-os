@@ -31,6 +31,10 @@ export class AgentRuntimeService {
     return (await this.repository.findRuns(query)).map((row) => this.toRun(row));
   }
 
+  async office(agentKeys: string[]): Promise<AgentRun[]> {
+    return (await this.repository.findOfficeRuns(agentKeys)).map((row) => this.toRun(row));
+  }
+
   async get(id: string): Promise<AgentRunDetail> {
     const run = await this.requireRun(id);
     const activities = await this.repository.findActivities(id);

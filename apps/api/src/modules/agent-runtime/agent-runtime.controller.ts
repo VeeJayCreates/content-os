@@ -9,6 +9,10 @@ import { UpdateAgentStateDto } from './dto/update-agent-state.dto';
 export class AgentRuntimeController {
   constructor(private readonly service: AgentRuntimeService) {}
   @Post() create(@Body() dto: CreateAgentRunDto) { return this.service.create(dto); }
+  @Get('office') office(@Query('agentKeys') agentKeys?: string) {
+    const keys = agentKeys?.split(',').map((key) => key.trim()).filter(Boolean) ?? [];
+    return this.service.office(keys);
+  }
   @Get() list(@Query() query: ListAgentRunsDto) { return this.service.list(query); }
   @Get(':id') get(@Param('id') id: string) { return this.service.get(id); }
   @Patch(':id/state') updateState(@Param('id') id: string, @Body() dto: UpdateAgentStateDto) { return this.service.updateState(id, dto.state); }

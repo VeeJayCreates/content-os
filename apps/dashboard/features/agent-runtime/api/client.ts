@@ -1,6 +1,14 @@
 "use client";
 
-import type { AgentRun, AgentRunDetail, AgentRunStatus } from "@content-os/contracts";
+import {
+  ProductionQueueStatus,
+  type AgentPipeline,
+  type AgentRun,
+  type AgentRunDetail,
+  type AgentRunStatus,
+  type ProductionQueueItem,
+  type Project,
+} from "@content-os/contracts";
 
 export type AgentRunFilters = {
   projectId?: string;
@@ -19,8 +27,8 @@ export class AgentRuntimeApiError extends Error {
   }
 }
 
-async function request<T>(url: string): Promise<T> {
-  const response = await fetch(url, { headers: { Accept: "application/json" } });
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, { ...init, headers: { Accept: "application/json", ...init?.headers } });
   if (!response.ok) {
     let message = "The agent runtime request could not be completed.";
     try {
@@ -45,6 +53,64 @@ export function listAgentRuns(filters: AgentRunFilters = {}) {
   return request<AgentRun[]>(`/api/agent-runs${suffix ? `?${suffix}` : ""}`);
 }
 
+/** Bounded room set, unpaged server query: history volume cannot hide room state. */
+export function listAgentRunsByAgent(agentKeys: readonly string[]) {
+  const query = new URLSearchParams({ agentKeys: agentKeys.join(",") });
+  return request<AgentRun[]>(`/api/agent-runs/office?${query}`);
+}
+
 export function getAgentRun(id: string) {
   return request<AgentRunDetail>(`/api/agent-runs/${encodeURIComponent(id)}`);
+}
+
+export function getAgentPipeline(productionQueueItemId: string) {
+  return request<AgentPipeline>(`/api/agent-pipelines/production-queue/${encodeURIComponent(productionQueueItemId)}/synchronize`, { method: "POST" });
+}
+
+const TERMINAL_PIPELINE_DISCOVERY_LIMIT = 50;
+
+/** Discover observable pipeline work from its source of truth, independently of run history. */
+export async function listAgentPipelines(additionalQueueItemIds: string[] = []) {
+  const projectResult = await Promise.allSettled([request<Project[]>("/api/projects")]);
+  const projects = projectResult[0]?.status === "fulfilled" ? projectResult[0].value : [];
+  const queueResults = await Promise.allSettled(
+    projects.map((project) =>
+      request<ProductionQueueItem[]>(
+        `/api/projects/${encodeURIComponent(project.id)}/production-queue`,
+      ),
+    ),
+  );
+  const activeStatuses = new Set<ProductionQueueStatus>([
+    ProductionQueueStatus.QUEUED,
+    ProductionQueueStatus.PROCESSING,
+  ]);
+  const queueItemIds = new Set(additionalQueueItemIds);
+  const queueItems = queueResults.flatMap((result) =>
+    result.status === "fulfilled" ? result.value : [],
+  );
+  for (const item of queueItems) {
+    if (activeStatuses.has(item.status)) queueItemIds.add(item.id);
+  }
+  queueItems
+    .filter(
+      (item) =>
+        item.status === ProductionQueueStatus.FAILED ||
+        item.status === ProductionQueueStatus.COMPLETED,
+    )
+    .sort(
+      (a, b) =>
+        b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id),
+    )
+    .slice(0, TERMINAL_PIPELINE_DISCOVERY_LIMIT)
+    .forEach((item) => queueItemIds.add(item.id));
+  const results = await Promise.allSettled([...queueItemIds].map(getAgentPipeline));
+  return {
+    pipelines: results.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    ),
+    partial:
+      projectResult.some((result) => result.status === "rejected") ||
+      queueResults.some((result) => result.status === "rejected") ||
+      results.some((result) => result.status === "rejected"),
+  };
 }
