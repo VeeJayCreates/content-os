@@ -124,6 +124,8 @@ export enum VideoRenderInputManifestStatus { READY = 'ready', FAILED = 'failed' 
 export enum VideoRenderInputFailureCode { COMPOSITION_NOT_FOUND = 'composition_not_found', COMPOSITION_NOT_READY = 'composition_not_ready', COMPOSITION_STALE = 'composition_stale', AUDIO_NOT_FOUND = 'audio_not_found', AUDIO_NOT_READY = 'audio_not_ready', AUDIO_STALE = 'audio_stale', AUDIO_OUTPUT_MISSING = 'audio_output_missing', AUDIO_SEGMENT_INVALID = 'audio_segment_invalid', CANDIDATE_STALE = 'candidate_stale', MEDIA_ASSET_MISSING = 'media_asset_missing', MEDIA_ASSET_NOT_READY = 'media_asset_not_ready', MEDIA_ASSET_INCOMPATIBLE = 'media_asset_incompatible' }
 export enum VideoRenderJobStatus { QUEUED = 'queued', RUNNING = 'running', COMPLETED = 'completed', FAILED = 'failed', STALE = 'stale' }
 export enum VideoRenderJobFailureCode { RENDER_INPUT_NOT_FOUND = 'render_input_not_found', RENDER_INPUT_NOT_READY = 'render_input_not_ready', RENDER_INPUT_STALE = 'render_input_stale', RETRY_NOT_FAILED = 'retry_not_failed', ENQUEUE_CONFLICT = 'enqueue_conflict', EXECUTION_FAILED = 'execution_failed' }
+export enum AgentRunStatus { QUEUED = 'queued', RUNNING = 'running', WAITING = 'waiting', COMPLETED = 'completed', FAILED = 'failed', CANCELLED = 'cancelled' }
+export enum AgentActivityType { STARTED = 'started', PROGRESS = 'progress', WAITING = 'waiting', COMPLETED = 'completed', FAILED = 'failed', CANCELLED = 'cancelled', NOTE = 'note' }
 export enum VoiceEmotion { NEUTRAL = 'neutral', WARM = 'warm', SERIOUS = 'serious', URGENT = 'urgent', CURIOUS = 'curious', EMPATHETIC = 'empathetic', ENERGETIC = 'energetic' }
 export enum VoiceIntensity { LOW = 'low', MEDIUM = 'medium', HIGH = 'high' }
 export enum VoiceSpeakingRate { SLOW = 'slow', NORMAL = 'normal', FAST = 'fast' }

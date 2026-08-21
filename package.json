@@ -10,7 +10,8 @@
     "test:video-render-worker:integration": "node scripts/video-render-worker.integration.mjs",
     "test:video-render-api:integration": "turbo run build --filter=api... && node scripts/video-render-api.integration.mjs",
     "test:api-bootstrap:smoke": "turbo run build --filter=api... && node scripts/api-bootstrap-smoke.mjs",
-    "test:e2e:video": "turbo run build --filter=api... && node node_modules/@playwright/test/cli.js test --config=playwright.config.ts"
+    "test:e2e:video": "turbo run build --filter=api... && node node_modules/@playwright/test/cli.js test --config=playwright.config.ts",
+    "test:agent-runtime:integration": "turbo run build --filter=@content-os/storage... && node scripts/agent-runtime-repository.integration.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.55.0",

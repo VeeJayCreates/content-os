@@ -25,6 +25,7 @@ import {
   MediaAssetRepository,
   VideoRenderInputRepository,
   VideoRenderJobRepository,
+  AgentRuntimeRepository,
 } from '@content-os/storage';
 
 export const storageProviders = [
@@ -78,4 +79,5 @@ export const storageProviders = [
   { provide: MediaAssetRepository, useFactory: () => new MediaAssetRepository() },
   { provide: VideoRenderInputRepository, useFactory: () => new VideoRenderInputRepository() },
   { provide: VideoRenderJobRepository, useFactory: () => new VideoRenderJobRepository() },
+  { provide: AgentRuntimeRepository, useFactory: () => new AgentRuntimeRepository() },
 ];

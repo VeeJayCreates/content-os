@@ -57,6 +57,13 @@
       "when": 1787247200000,
       "tag": "0007_audio_visual_prerequisites",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1787250800000,
+      "tag": "0008_agent_runtime",
+      "breakpoints": true
     }
   ]
 }

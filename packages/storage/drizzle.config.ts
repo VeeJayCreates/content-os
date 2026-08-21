@@ -30,6 +30,7 @@ export default defineConfig({
     "./src/schema/production-queue.ts",
     "./src/schema/job.ts",
     "./src/schema/workflow.ts",
+    "./src/schema/agent-runtime.ts",
   ],
   out: "./migrations",
   dialect: "sqlite",
