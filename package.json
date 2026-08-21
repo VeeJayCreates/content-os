@@ -6,12 +6,14 @@
     "dev": "turbo run dev",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types"
-    ,"test:video-render-worker:integration": "node scripts/video-render-worker.integration.mjs",
+    "check-types": "turbo run check-types",
+    "test:video-render-worker:integration": "node scripts/video-render-worker.integration.mjs",
     "test:video-render-api:integration": "turbo run build --filter=api... && node scripts/video-render-api.integration.mjs",
-    "test:api-bootstrap:smoke": "turbo run build --filter=api... && node scripts/api-bootstrap-smoke.mjs"
+    "test:api-bootstrap:smoke": "turbo run build --filter=api... && node scripts/api-bootstrap-smoke.mjs",
+    "test:e2e:video": "turbo run build --filter=api... && node node_modules/@playwright/test/cli.js test --config=playwright.config.ts"
   },
   "devDependencies": {
+    "@playwright/test": "1.55.0",
     "prettier": "^3.7.4",
     "turbo": "^2.10.8",
     "typescript": "5.9.2",
