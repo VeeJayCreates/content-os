@@ -24,6 +24,10 @@ import type {
   VisualAssetManifest,
   VisualAssetCandidate,
   VisualAssetAcquisitionRun,
+  VideoCompositionPlan,
+  VideoCompositionAssetPreparationResult,
+  VideoRenderInputManifest,
+  VideoRenderJob,
   UpdateResearchSourceInput,
 } from "@content-os/contracts";
 
@@ -31,12 +35,15 @@ const apiEndpoint = "/api";
 const endpoint = `${apiEndpoint}/research-sources`;
 
 export class ResearchApiError extends Error {
+  readonly status?: number;
+
   constructor(
     message: string,
-    readonly status?: number,
+    status?: number,
   ) {
     super(message);
     this.name = "ResearchApiError";
+    this.status = status;
   }
 }
 
@@ -408,4 +415,52 @@ export function finalizeVisualAssetManifest(contentScriptId: string) {
     `${visualAssetPath(contentScriptId)}/finalize`,
     { method: "POST" },
   );
+}
+
+const videoProductionPath = (contentScriptId: string) =>
+  `${apiEndpoint}/content-scripts/${encodeURIComponent(contentScriptId)}`;
+
+export function prepareVideoComposition(contentScriptId: string) {
+  return requestUrl<VideoCompositionPlan>(
+    `${videoProductionPath(contentScriptId)}/video-composition-plan`,
+    { method: "POST" },
+  );
+}
+
+export function bindVideoCompositionAssets(contentScriptId: string) {
+  return requestUrl<VideoCompositionAssetPreparationResult>(
+    `${videoProductionPath(contentScriptId)}/video-composition-plan/assets`,
+    { method: "POST" },
+  );
+}
+
+export function prepareVideoRenderInput(contentScriptId: string) {
+  return requestUrl<VideoRenderInputManifest>(
+    `${videoProductionPath(contentScriptId)}/video-render-input-manifest`,
+    { method: "POST" },
+  );
+}
+
+export function enqueueVideoRender(contentScriptId: string) {
+  return requestUrl<VideoRenderJob>(
+    `${videoProductionPath(contentScriptId)}/video-render-jobs`,
+    { method: "POST" },
+  );
+}
+
+export function retryVideoRender(contentScriptId: string) {
+  return requestUrl<VideoRenderJob>(
+    `${videoProductionPath(contentScriptId)}/video-render-jobs/retry`,
+    { method: "POST" },
+  );
+}
+
+export function getVideoRenderStatus(contentScriptId: string) {
+  return requestUrl<VideoRenderJob>(
+    `${videoProductionPath(contentScriptId)}/video-render-job`,
+  );
+}
+
+export function videoRenderOutputUrl(contentScriptId: string) {
+  return `${videoProductionPath(contentScriptId)}/video-render-job/output`;
 }

@@ -28,6 +28,7 @@ import {
   submitScenePlanBatch,
 } from "@/features/research/api/client";
 import { VisualAssetManifestPanel } from "./visual-asset-manifest-panel";
+import { VideoRenderPanel } from "./video-render-panel";
 
 type Values<T> = Record<string, T | undefined>;
 const label = (value: string) =>
@@ -648,6 +649,7 @@ export function ProductionQueueScreen() {
                                 : "Prepare Visual Assets"}
                             </Button>
                           )}
+                          <VideoRenderPanel contentScriptId={contentPackage.id} />
                         </>
                       ) : (
                         <Button
