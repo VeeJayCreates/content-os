@@ -1,11 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ProductionQueueStatus, ResearchVerificationStatus, type FillProductionQueueResult, type ProductionQueueItem } from '@content-os/contracts';
 import { ProductionQueueRepository, ProjectRepository, ResearchPackageRepository, TopicCandidateRepository } from '@content-os/storage';
 import { evaluateResearchVerification } from './research-verification';
+import { AGENT_PIPELINE_BRIDGE, observeAgentPipeline, type AgentPipelineBridge } from '../agent-runtime/agent-pipeline-bridge.token';
 
 @Injectable()
 export class ProductionQueueService {
-  constructor(private readonly queue: ProductionQueueRepository, private readonly projects: ProjectRepository, private readonly packages: ResearchPackageRepository, private readonly candidates: TopicCandidateRepository) {}
+  constructor(private readonly queue: ProductionQueueRepository, private readonly projects: ProjectRepository, private readonly packages: ResearchPackageRepository, private readonly candidates: TopicCandidateRepository, @Optional() @Inject(AGENT_PIPELINE_BRIDGE) private readonly agentPipeline?: AgentPipelineBridge) {}
   async fill(projectId: string, targetCount: number): Promise<FillProductionQueueResult> {
     const project = await this.projects.findById(projectId); if (!project) throw new NotFoundException('Project not found');
     const skipped: Record<string, number> = {}; const skip = (reason: string) => { skipped[reason] = (skipped[reason] ?? 0) + 1; };
@@ -30,7 +31,7 @@ export class ProductionQueueService {
     const items: ProductionQueueItem[] = [];
     for (const [index, candidate] of selected.entries()) {
       const item = await this.queue.enqueue({ projectId, opportunityId: candidate.row.opportunity.id, researchPackageId: candidate.row.researchPackage!.id, status: ProductionQueueStatus.QUEUED, priority: index + 1, selectionScore: candidate.score, selectionReason: `Corroborated by ${candidate.verification.distinctSourceCount} configured sources; ranked by Topic Strength, Research Confidence, and freshness.`, queuedAt: new Date().toISOString(), startedAt: null, completedAt: null, failedAt: null });
-      if (item) items.push({ ...item, status: ProductionQueueStatus.QUEUED, title: candidate.row.opportunity.title, verificationStatus: candidate.verification.verificationStatus });
+      if (item) { await observeAgentPipeline(this.agentPipeline?.synchronize(item.id)); items.push({ ...item, status: ProductionQueueStatus.QUEUED, title: candidate.row.opportunity.title, verificationStatus: candidate.verification.verificationStatus }); }
     }
     return { requestedCount: targetCount, queuedCount: items.length, skipped, items };
   }

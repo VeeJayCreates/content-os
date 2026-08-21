@@ -14,7 +14,8 @@ describe('ProductionQueueScriptBatchService', () => {
   const runtime = { submit: jest.fn(), syncBatchStatus: jest.fn(), completeItems: jest.fn() };
   const queue = { updateStatus: jest.fn() };
   const scripts = { prepare: jest.fn(), persistPrepared: jest.fn() };
-  const service = () => new ProductionQueueScriptBatchService(runtime as never, queue as never, scripts as never);
+  const bridge = { synchronize: jest.fn() };
+  const service = () => new ProductionQueueScriptBatchService(runtime as never, queue as never, scripts as never, bridge);
   const prepared = (id: string, hash = `hash-${id}`) => ({ queueItemId: id, projectId: 'project-1', opportunityId: `opportunity-${id}`, researchPackageId: `package-${id}`, editorialAssessmentId: `angle-${id}`, input: { facts: [{ id: `fact-${id}` }] }, inputHash: hash, cached: null });
 
   beforeEach(() => jest.resetAllMocks());
@@ -29,6 +30,8 @@ describe('ProductionQueueScriptBatchService', () => {
     expect(submitted.map((item: { customId: string }) => item.customId)).toEqual(['content-package:one:hash-one', 'content-package:two:hash-two']);
     expect(queue.updateStatus).toHaveBeenCalledWith('one', 'processing');
     expect(queue.updateStatus).toHaveBeenCalledWith('two', 'processing');
+    expect(bridge.synchronize).toHaveBeenCalledWith('one');
+    expect(bridge.synchronize).toHaveBeenCalledWith('two');
   });
 
   it('reconciles out-of-order batch results, uses shared script persistence, and isolates one failed sibling', async () => {
@@ -46,7 +49,15 @@ describe('ProductionQueueScriptBatchService', () => {
     expect(scripts.persistPrepared).toHaveBeenCalledWith(expect.objectContaining({ queueItemId: 'one' }), expect.any(Object), 'batch');
     expect(scripts.persistPrepared.mock.calls[0][1]).toEqual(expect.objectContaining({ primaryTitle: 'Title', thumbnailCreativeBrief: 'Brief' }));
     expect(queue.updateStatus).toHaveBeenCalledWith('two', 'failed');
+    expect(bridge.synchronize).toHaveBeenCalledWith('two');
     expect(queue.updateStatus).not.toHaveBeenCalledWith('one', 'completed');
+  });
+
+  it('preserves a terminal batch failure when pipeline observation fails', async () => {
+    runtime.syncBatchStatus.mockResolvedValue({ status: 'completed', items: [{ customId: 'one', entityType: 'production_queue_item', entityId: 'one', promptHash: 'hash-one', status: 'queued' }], results: [{ customId: 'one', status: 'failed', usage: { inputTokens: null, outputTokens: null } }] });
+    bridge.synchronize.mockRejectedValue(new Error('bridge unavailable'));
+    await expect(service().consumeCompletedScriptBatch('batch-1')).resolves.toEqual({ batchId: 'batch-1', processed: 1, succeeded: 0, failed: 1 });
+    expect(queue.updateStatus).toHaveBeenCalledWith('one', 'failed');
   });
 
   it('does not reprocess a completed item during repeated reconciliation', async () => {

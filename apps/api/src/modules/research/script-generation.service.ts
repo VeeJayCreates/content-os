@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import {
   AiExecutionMode,
   AiTask,
@@ -25,6 +25,7 @@ import {
 import { AiRuntime } from '../ai/ai-runtime.service';
 import { contentStylePreset } from '../project/content-style-profile.service';
 import { ProductionQueueContentAngleService } from './production-queue-content-angle.service';
+import { AGENT_PIPELINE_BRIDGE, observeAgentPipeline, type AgentPipelineBridge } from '../agent-runtime/agent-pipeline-bridge.token';
 
 export const CONTENT_PACKAGE_PROMPT_VERSION = 'content-package-v1';
 // Kept as an export alias for Script Generation consumers during the additive migration.
@@ -74,6 +75,7 @@ export class ScriptGenerationService {
     private readonly scripts: ContentScriptRepository,
     private readonly styles: ContentStyleProfileRepository,
     private readonly runtime: AiRuntime,
+    @Optional() @Inject(AGENT_PIPELINE_BRIDGE) private readonly agentPipeline?: AgentPipelineBridge,
   ) {}
 
   async generate(queueItemId: string, options: ScriptGenerationOptions = {}): Promise<ContentScript> {
@@ -89,6 +91,7 @@ export class ScriptGenerationService {
       return await this.persistPrepared(prepared, output, AiExecutionMode.SYNCHRONOUS);
     } catch (error) {
       await this.queue.updateStatus(queueItemId, ProductionQueueStatus.FAILED);
+      await observeAgentPipeline(this.agentPipeline?.synchronize(queueItemId));
       throw error;
     }
   }
@@ -127,7 +130,7 @@ export class ScriptGenerationService {
   async persistPrepared(prepared: PreparedScriptGeneration, value: unknown, executionMode: AiExecutionMode): Promise<ContentScript> {
     const output = this.validate(value, new Set(prepared.input.facts.map((fact) => fact.id)), prepared.input.format);
     const route = this.runtime.route(AiTask.CONTENT_PACKAGE_GENERATION);
-    return this.scripts.upsert({
+    const script = await this.scripts.upsert({
       projectId: prepared.projectId,
       opportunityId: prepared.opportunityId,
       productionQueueItemId: prepared.queueItemId,
@@ -145,7 +148,9 @@ export class ScriptGenerationService {
       promptVersion: CONTENT_PACKAGE_PROMPT_VERSION,
       inputHash: prepared.inputHash,
       generatedAt: new Date().toISOString(),
-    }) as Promise<ContentScript>;
+    }) as ContentScript;
+    await observeAgentPipeline(this.agentPipeline?.synchronize(prepared.queueItemId));
+    return script;
   }
 
   async find(queueItemId: string): Promise<ContentScript> {

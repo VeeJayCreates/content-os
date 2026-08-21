@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { AiBatchItemStatus, AiBatchStatus, AiTask, ProductionQueueStatus } from '@content-os/contracts';
 import { ProductionQueueRepository } from '@content-os/storage';
 import { AiBatchRuntime } from '../ai/ai-batch-runtime.service';
+import { AGENT_PIPELINE_BRIDGE, observeAgentPipeline, type AgentPipelineBridge } from '../agent-runtime/agent-pipeline-bridge.token';
 import { EDITORIAL_ASSESSMENT_SYSTEM_PROMPT } from './editorial-assessment.evaluator';
 import { EditorialAssessmentService, type PreparedEditorialAssessment } from './editorial-assessment.service';
 import { ProductionQueueContentAngleService } from './production-queue-content-angle.service';
@@ -10,7 +11,7 @@ type PreparedItem = { queueItemId: string; customId: string; prepared: PreparedE
 
 @Injectable()
 export class ProductionQueueContentAngleBatchService {
-  constructor(private readonly runtime: AiBatchRuntime, private readonly queue: ProductionQueueRepository, private readonly angles: ProductionQueueContentAngleService, private readonly editorial: EditorialAssessmentService) {}
+  constructor(private readonly runtime: AiBatchRuntime, private readonly queue: ProductionQueueRepository, private readonly angles: ProductionQueueContentAngleService, private readonly editorial: EditorialAssessmentService, @Optional() @Inject(AGENT_PIPELINE_BRIDGE) private readonly agentPipeline?: AgentPipelineBridge) {}
 
   async prepareContentAngleBatch(queueItemIds: readonly string[]) {
     const prepared: PreparedItem[] = [];
@@ -39,7 +40,10 @@ export class ProductionQueueContentAngleBatchService {
       promptHash: item.prepared.inputHash,
     })));
     if (!batch) throw new Error('Unable to submit Content Angle batch');
-    await Promise.all(prepared.map((item) => this.queue.updateStatus(item.queueItemId, ProductionQueueStatus.PROCESSING)));
+    await Promise.all(prepared.map(async (item) => {
+      await this.queue.updateStatus(item.queueItemId, ProductionQueueStatus.PROCESSING);
+      await observeAgentPipeline(this.agentPipeline?.synchronize(item.queueItemId));
+    }));
     return { batchId: batch.id, submittedItemIds: prepared.map((item) => item.queueItemId), skipped };
   }
 
@@ -73,5 +77,6 @@ export class ProductionQueueContentAngleBatchService {
   private async fail(batchId: string, customId: string, queueItemId: string, category: string, code: string | null, inputTokens: number | null, outputTokens: number | null) {
     await this.runtime.completeItems(batchId, [{ customId, status: AiBatchItemStatus.FAILED, errorCategory: category, errorCode: code, inputTokens, outputTokens }]);
     await this.queue.updateStatus(queueItemId, ProductionQueueStatus.FAILED);
+    await observeAgentPipeline(this.agentPipeline?.synchronize(queueItemId));
   }
 }

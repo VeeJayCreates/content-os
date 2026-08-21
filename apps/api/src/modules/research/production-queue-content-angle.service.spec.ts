@@ -22,7 +22,8 @@ describe('ProductionQueueContentAngleService', () => {
   const packages = { findById: jest.fn(), findFactsWithEvidenceByPackageIds: jest.fn() };
   const candidates = { membershipCountsByOpportunityIds: jest.fn() };
   const editorial = { assessWithPackage: jest.fn(), findOneWithPackage: jest.fn() };
-  const service = new ProductionQueueContentAngleService(queue as never, projects as never, opportunities as never, packages as never, candidates as never, editorial as never);
+  const bridge = { synchronize: jest.fn() };
+  const service = new ProductionQueueContentAngleService(queue as never, projects as never, opportunities as never, packages as never, candidates as never, editorial as never, bridge);
 
   const item = { id: 'queue-1', projectId: 'project-1', opportunityId: 'opportunity-1', researchPackageId: 'package-1', status: 'queued' };
   const opportunity = { id: 'opportunity-1', projectId: 'project-1', title: 'FCAS' };
@@ -47,6 +48,7 @@ describe('ProductionQueueContentAngleService', () => {
     expect(editorial.assessWithPackage).toHaveBeenCalledWith(opportunity, 'package-1');
     expect(queue.updateStatus).toHaveBeenNthCalledWith(1, 'queue-1', ProductionQueueStatus.PROCESSING);
     expect(queue.updateStatus).not.toHaveBeenCalledWith('queue-1', ProductionQueueStatus.FAILED);
+    expect(bridge.synchronize).toHaveBeenCalledWith('queue-1');
   });
 
   it('does not call editorial generation when verification is not corroborated', async () => {
@@ -95,6 +97,13 @@ describe('ProductionQueueContentAngleService', () => {
     await expect(service.generate('queue-1')).rejects.toThrow('provider failure');
     expect(queue.updateStatus).toHaveBeenNthCalledWith(1, 'queue-1', ProductionQueueStatus.PROCESSING);
     expect(queue.updateStatus).toHaveBeenNthCalledWith(2, 'queue-1', ProductionQueueStatus.FAILED);
+    expect(bridge.synchronize).toHaveBeenCalledTimes(2);
+  });
+
+  it('preserves generation outcomes when pipeline observation fails', async () => {
+    bridge.synchronize.mockRejectedValue(new Error('bridge unavailable'));
+    await expect(service.generate('queue-1')).resolves.toMatchObject({ id: 'assessment-1' });
+    expect(queue.updateStatus).toHaveBeenCalledWith('queue-1', ProductionQueueStatus.PROCESSING);
   });
 
   it('does not allow a project mismatch to generate an angle for another project', async () => {

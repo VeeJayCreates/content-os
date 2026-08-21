@@ -11,7 +11,8 @@ describe('ProductionQueueContentAngleBatchService', () => {
   const queue = { updateStatus: jest.fn() };
   const angles = { resolveEligibleContext: jest.fn() };
   const editorial = { prepareWithPackage: jest.fn(), persistPreparedAssessment: jest.fn() };
-  const service = () => new ProductionQueueContentAngleBatchService(runtime as never, queue as never, angles as never, editorial as never);
+  const bridge = { synchronize: jest.fn() };
+  const service = () => new ProductionQueueContentAngleBatchService(runtime as never, queue as never, angles as never, editorial as never, bridge);
   const prepared = (id: string, hash = `hash-${id}`) => ({ opportunity: { id: `opportunity-${id}`, projectId: 'project-1' }, researchPackageId: `package-${id}`, input: { researchPackage: { facts: [], signals: [] } }, inputHash: hash, cached: null });
 
   beforeEach(() => { jest.resetAllMocks(); });
@@ -25,6 +26,8 @@ describe('ProductionQueueContentAngleBatchService', () => {
     expect(queue.updateStatus).toHaveBeenCalledWith('one', 'processing');
     expect(queue.updateStatus).toHaveBeenCalledWith('two', 'processing');
     expect(queue.updateStatus).not.toHaveBeenCalledWith('bad', 'processing');
+    expect(bridge.synchronize).toHaveBeenCalledWith('one');
+    expect(bridge.synchronize).toHaveBeenCalledWith('two');
   });
 
   it('does not alter queue lifecycle if provider submission fails', async () => {
@@ -44,7 +47,15 @@ describe('ProductionQueueContentAngleBatchService', () => {
     expect(runtime.completeItems).toHaveBeenCalledWith('batch-1', expect.arrayContaining([expect.objectContaining({ customId: 'one', status: 'completed' })]));
     expect(runtime.completeItems).toHaveBeenCalledWith('batch-1', expect.arrayContaining([expect.objectContaining({ customId: 'two', status: 'failed', errorCategory: 'output_validation' })]));
     expect(queue.updateStatus).toHaveBeenCalledWith('two', 'failed');
+    expect(bridge.synchronize).toHaveBeenCalledWith('two');
     expect(queue.updateStatus).not.toHaveBeenCalledWith('one', 'completed');
+  });
+
+  it('preserves a terminal batch failure when pipeline observation fails', async () => {
+    runtime.syncBatchStatus.mockResolvedValue({ status: 'completed', items: [{ customId: 'one', entityType: 'production_queue_item', entityId: 'one', promptHash: 'hash-one', status: 'queued' }], results: [{ customId: 'one', status: 'failed', usage: { inputTokens: null, outputTokens: null } }] });
+    bridge.synchronize.mockRejectedValue(new Error('bridge unavailable'));
+    await expect(service().consumeCompletedContentAngleBatch('batch-1')).resolves.toEqual({ batchId: 'batch-1', processed: 1, succeeded: 0, failed: 1 });
+    expect(queue.updateStatus).toHaveBeenCalledWith('one', 'failed');
   });
 
   it('does not reprocess completed items during repeated reconciliation', async () => {

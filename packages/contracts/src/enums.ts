@@ -126,6 +126,9 @@ export enum VideoRenderJobStatus { QUEUED = 'queued', RUNNING = 'running', COMPL
 export enum VideoRenderJobFailureCode { RENDER_INPUT_NOT_FOUND = 'render_input_not_found', RENDER_INPUT_NOT_READY = 'render_input_not_ready', RENDER_INPUT_STALE = 'render_input_stale', RETRY_NOT_FAILED = 'retry_not_failed', ENQUEUE_CONFLICT = 'enqueue_conflict', EXECUTION_FAILED = 'execution_failed' }
 export enum AgentRunStatus { QUEUED = 'queued', RUNNING = 'running', WAITING = 'waiting', COMPLETED = 'completed', FAILED = 'failed', CANCELLED = 'cancelled' }
 export enum AgentActivityType { STARTED = 'started', PROGRESS = 'progress', WAITING = 'waiting', COMPLETED = 'completed', FAILED = 'failed', CANCELLED = 'cancelled', NOTE = 'note' }
+export enum AgentPipelineStage { RESEARCH = 'research', CONTENT = 'content', PRODUCTION = 'production' }
+export enum AgentTaskStatus { QUEUED = 'queued', RUNNING = 'running', COMPLETED = 'completed', FAILED = 'failed', STALE = 'stale' }
+export enum AgentPipelineEventType { TASK_CREATED = 'task_created', SOURCE_STATUS_CHANGED = 'source_status_changed', HANDOFF_CREATED = 'handoff_created' }
 export enum VoiceEmotion { NEUTRAL = 'neutral', WARM = 'warm', SERIOUS = 'serious', URGENT = 'urgent', CURIOUS = 'curious', EMPATHETIC = 'empathetic', ENERGETIC = 'energetic' }
 export enum VoiceIntensity { LOW = 'low', MEDIUM = 'medium', HIGH = 'high' }
 export enum VoiceSpeakingRate { SLOW = 'slow', NORMAL = 'normal', FAST = 'fast' }

@@ -26,7 +26,7 @@ describe('ScriptGenerationService', () => {
   const scripts = { findByQueueItemId: jest.fn(), upsert: jest.fn() };
   const styles = { findByProjectId: jest.fn() };
   const runtime = { structuredGeneration: jest.fn(), route: jest.fn() };
-  const service = () => new ScriptGenerationService(queue as never, angles as never, packages as never, assessments as never, scripts as never, styles as never, runtime as never);
+  const service = (bridge?: any) => new ScriptGenerationService(queue as never, angles as never, packages as never, assessments as never, scripts as never, styles as never, runtime as never, bridge);
   const context = { item: { id: 'queue-1', researchPackageId: 'package-1' }, opportunity: { id: 'opportunity-1', projectId: 'project-1' } };
   const angle = { id: 'angle-1', status: 'ready', researchPackageId: 'package-1', angleType: 'explainer', videoIdeaTitle: 'FCAS explained', videoIdeaSummary: 'summary', hook: 'why now', whyNow: 'now' };
   const facts = [{ id: 'fact-1', claim: 'Verified FCAS fact', status: 'supported', signalId: 'signal-1' }];
@@ -49,6 +49,13 @@ describe('ScriptGenerationService', () => {
     expect(runtime.structuredGeneration).toHaveBeenCalledWith(expect.objectContaining({ task: 'content_package_generation', projectId: 'project-1' }));
     expect(generated).toEqual(expect.objectContaining({ researchPackageId: 'package-1', status: 'ready', executionMode: 'synchronous', primaryTitle: 'Why FCAS matters', thumbnailText: 'FCAS EXPLAINED' }));
     expect(queue.updateStatus).not.toHaveBeenCalled();
+  });
+
+  it('keeps a persisted Content Package successful when bridge persistence fails', async () => {
+    const bridge = { synchronize: jest.fn().mockRejectedValue(new Error('bridge unavailable')) };
+    await expect(service(bridge).generate('queue-1')).resolves.toMatchObject({ id: 'script-1', status: 'ready' });
+    expect(scripts.upsert).toHaveBeenCalled();
+    expect(bridge.synchronize).toHaveBeenCalledWith('queue-1');
   });
 
   it.each(['single_source', 'insufficient', 'conflicting'])('rejects %s eligibility before calling the runtime', async (reason) => {

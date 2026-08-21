@@ -3,7 +3,7 @@ import { realpath, rm, stat, mkdir } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import type { Readable } from 'node:stream';
 import { resolve, join, sep } from 'node:path';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   VideoRenderInputRepository,
   VideoRenderJobRepository,
@@ -13,6 +13,7 @@ import {
   type MediaStorageProvider,
 } from '../media/media-storage-provider';
 import { VIDEO_RENDERER, type VideoRenderer } from './video-renderer';
+import { AGENT_PIPELINE_BRIDGE, observeAgentPipeline, type AgentPipelineBridge } from '../agent-runtime/agent-pipeline-bridge.token';
 
 const MAX_OUTPUT_BYTES = 500 * 1024 * 1024;
 async function fingerprint(stream: Readable) {
@@ -34,10 +35,12 @@ export class VideoRenderWorkerService {
     @Inject(VIDEO_RENDERER) private readonly renderer: VideoRenderer,
     @Inject(MEDIA_STORAGE_PROVIDER)
     private readonly storage: MediaStorageProvider,
+    @Optional() @Inject(AGENT_PIPELINE_BRIDGE) private readonly agentPipeline?: AgentPipelineBridge,
   ) {}
   async runNext() {
     const claim = await this.jobs.claimNextQueued();
     if (!claim) return undefined;
+    await observeAgentPipeline(this.agentPipeline?.synchronizeContentScript(claim.contentScriptId));
     const identity = {
       jobId: claim.id,
       attemptId: claim.attemptId,
@@ -115,7 +118,7 @@ export class VideoRenderWorkerService {
         stored.sizeBytes !== expected.sizeBytes
       )
         throw new Error('output_integrity_mismatch');
-      return await this.jobs.complete({
+      const completed = await this.jobs.complete({
         ...identity,
         completedUnits: manifest.sceneCount + 2,
         totalUnits: manifest.sceneCount + 2,
@@ -128,10 +131,13 @@ export class VideoRenderWorkerService {
           durationMs: rendered.durationMs,
         },
       });
+      await observeAgentPipeline(this.agentPipeline?.synchronizeContentScript(claim.contentScriptId));
+      return completed;
     } catch {
       if (createdStoredObject && storageKey)
         await this.storage.remove(storageKey).catch(() => undefined);
       await this.jobs.fail(identity).catch(() => undefined);
+      await observeAgentPipeline(this.agentPipeline?.synchronizeContentScript(claim.contentScriptId));
       return this.jobs.findByContentScriptId(claim.contentScriptId);
     } finally {
       if (createdAttemptDir && dir)

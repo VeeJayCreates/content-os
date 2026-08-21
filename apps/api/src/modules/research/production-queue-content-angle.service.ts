@@ -1,17 +1,19 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ProductionQueueStatus, ResearchVerificationStatus, type EditorialAssessment } from '@content-os/contracts';
 import { OpportunityRepository, ProductionQueueRepository, ProjectRepository, ResearchPackageRepository, TopicCandidateRepository } from '@content-os/storage';
 import { EditorialAssessmentService } from './editorial-assessment.service';
+import { AGENT_PIPELINE_BRIDGE, observeAgentPipeline, type AgentPipelineBridge } from '../agent-runtime/agent-pipeline-bridge.token';
 import { evaluateResearchVerification } from './research-verification';
 
 @Injectable()
 export class ProductionQueueContentAngleService {
-  constructor(private readonly queue: ProductionQueueRepository, private readonly projects: ProjectRepository, private readonly opportunities: OpportunityRepository, private readonly packages: ResearchPackageRepository, private readonly candidates: TopicCandidateRepository, private readonly editorial: EditorialAssessmentService) {}
+  constructor(private readonly queue: ProductionQueueRepository, private readonly projects: ProjectRepository, private readonly opportunities: OpportunityRepository, private readonly packages: ResearchPackageRepository, private readonly candidates: TopicCandidateRepository, private readonly editorial: EditorialAssessmentService, @Optional() @Inject(AGENT_PIPELINE_BRIDGE) private readonly agentPipeline?: AgentPipelineBridge) {}
   async generate(queueItemId: string): Promise<EditorialAssessment> {
     const context = await this.resolveEligibleContext(queueItemId);
     await this.queue.updateStatus(queueItemId, ProductionQueueStatus.PROCESSING);
+    await observeAgentPipeline(this.agentPipeline?.synchronize(queueItemId));
     try { return await this.editorial.assessWithPackage(context.opportunity, context.item.researchPackageId); }
-    catch (error) { await this.queue.updateStatus(queueItemId, ProductionQueueStatus.FAILED); throw error; }
+    catch (error) { await this.queue.updateStatus(queueItemId, ProductionQueueStatus.FAILED); await observeAgentPipeline(this.agentPipeline?.synchronize(queueItemId)); throw error; }
   }
   async find(queueItemId: string): Promise<EditorialAssessment> {
     const context = await this.context(queueItemId, false);

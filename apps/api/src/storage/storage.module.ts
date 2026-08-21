@@ -29,6 +29,7 @@ import {
   VideoRenderInputRepository,
   VideoRenderJobRepository,
   AgentRuntimeRepository,
+  AgentPipelineRepository,
 } from '@content-os/storage';
 
 @Module({
@@ -61,6 +62,7 @@ import {
     VideoRenderInputRepository,
     VideoRenderJobRepository,
     AgentRuntimeRepository,
+    AgentPipelineRepository,
   ],
 })
 export class StorageModule {}

@@ -39,9 +39,10 @@ import { VisualAssetAcquisitionProviderRegistry } from './visual-asset-acquisiti
 import { PexelsVisualAssetProvider } from './pexels-visual-asset.provider';
 import { VisualAssetAcquisitionWorkflowService } from './visual-asset-acquisition-workflow.service';
 import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } from './editorial-assessment.evaluator';
+import { AgentRuntimeModule } from '../agent-runtime/agent-runtime.module';
 
 @Module({
-  imports: [StorageModule, AiRuntimeModule],
+  imports: [StorageModule, AiRuntimeModule, AgentRuntimeModule],
   controllers: [
     ResearchController,
     SignalController,
