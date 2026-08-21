@@ -1,16 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { access, link, mkdir, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
-import type { MediaStorageProvider, MaterializeObject } from './media-storage-provider';
+import { MEDIA_STORAGE_ROOT, type MediaStorageProvider, type MaterializeObject } from './media-storage-provider';
 
 @Injectable()
 export class LocalMediaStorageProvider implements MediaStorageProvider {
   readonly id = 'local' as const;
-  constructor(private readonly root = process.env.MEDIA_STORAGE_ROOT || 'D:\\ContentOS-Media') {}
+  constructor(@Inject(MEDIA_STORAGE_ROOT) private readonly root: string) {}
   private path(key: string) {
     if (!/^[a-z0-9][a-z0-9/_.-]+$/i.test(key) || key.includes('..')) throw new Error('Invalid media storage key');
     const root = resolve(this.root); const target = resolve(root, ...key.split('/'));

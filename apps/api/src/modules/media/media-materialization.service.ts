@@ -4,7 +4,7 @@ import { isIP } from 'node:net';
 import { Readable } from 'node:stream';
 import { Inject, Injectable } from '@nestjs/common';
 import { MediaAssetRepository, VisualAssetRepository } from '@content-os/storage';
-import { MEDIA_STORAGE_PROVIDER, type MediaStorageProvider } from './media-storage-provider';
+import { MEDIA_MATERIALIZATION_OPTIONS, MEDIA_STORAGE_PROVIDER, type MediaStorageProvider } from './media-storage-provider';
 import { isGlobalAddress, safeHttpsUrl, type AddressResolver } from '../../common/public-network-url';
 
 type PinnedFetcher = (url: URL, addresses: string[], signal: AbortSignal) => Promise<Response>;
@@ -32,7 +32,7 @@ export class MediaMaterializationService {
   private readonly maxBytes: number; private readonly allowed: Set<string>; private readonly resolver: AddressResolver; private readonly maxRedirects: number; private readonly requestTimeoutMs: number; private readonly downloadTimeoutMs: number; private readonly fetcher: PinnedFetcher;
   constructor(private readonly visuals: VisualAssetRepository, private readonly assets: MediaAssetRepository,
     @Inject(MEDIA_STORAGE_PROVIDER) private readonly storage: MediaStorageProvider,
-    options: MediaMaterializationOptions = {}) {
+    @Inject(MEDIA_MATERIALIZATION_OPTIONS) options: MediaMaterializationOptions = {}) {
     this.maxBytes = parseMaxBytes(options.maxBytes ?? process.env.MEDIA_MAX_BYTES);
     this.allowed = new Set(options.allowedMimeTypes ?? ['image/jpeg', 'image/png', 'image/webp', 'video/mp4']);
     this.resolver = options.resolver ?? (async (hostname) => (await import('node:dns/promises')).lookup(hostname, { all: true, verbatim: true }));

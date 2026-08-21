@@ -1,12 +1,28 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Test } from '@nestjs/testing';
 import { LocalMediaStorageProvider } from './local-media-storage.provider';
+import { MEDIA_STORAGE_PROVIDER, MEDIA_STORAGE_ROOT } from './media-storage-provider';
 
 describe('LocalMediaStorageProvider', () => {
   let root: string;
   beforeEach(async () => { root = await mkdtemp(join(tmpdir(), 'content-os-media-')); });
   afterEach(async () => { await rm(root, { recursive: true, force: true }); });
+  it('resolves through explicit Nest runtime tokens', async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        { provide: MEDIA_STORAGE_ROOT, useValue: root },
+        LocalMediaStorageProvider,
+        { provide: MEDIA_STORAGE_PROVIDER, useExisting: LocalMediaStorageProvider },
+      ],
+    }).compile();
+
+    const concrete = module.get(LocalMediaStorageProvider);
+    expect(module.get(MEDIA_STORAGE_PROVIDER)).toBe(concrete);
+    await expect(concrete.materialize({ storageKey: 'image/di/object.png', bytes: Uint8Array.of(7) })).resolves.toBe(true);
+    await module.close();
+  });
   it('atomically materializes and idempotently resolves a deterministic key', async () => {
     const provider = new LocalMediaStorageProvider(root); const key = 'image/ab/abcdef.png';
     await expect(provider.materialize({ storageKey: key, bytes: Uint8Array.from([1, 2, 3]) })).resolves.toBe(true);
