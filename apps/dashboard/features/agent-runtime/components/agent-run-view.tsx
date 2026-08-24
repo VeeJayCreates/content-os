@@ -5,12 +5,12 @@ import type {
   AgentRun,
   AgentRunDetail,
   AgentTask,
+  JarvisVoiceState,
 } from "@content-os/contracts";
 import {
   AlertTriangle,
   ArrowRight,
   Boxes,
-  Mic,
   Radio,
   ScanSearch,
   FileText,
@@ -37,6 +37,7 @@ import {
   stateEntries,
   type FlowState,
 } from "./agent-run-state";
+import { useJarvisVoice } from './use-jarvis-voice';
 const ROOMS = [
   {
     key: "research_agent",
@@ -78,7 +79,7 @@ const flowStyle: Record<FlowState, string> = {
 };
 const FLOW = FLOW_STAGES;
 const podMeta: Record<string, { label: string; role: string; icon: React.ComponentType<{ className?: string }> }> = { research_agent: { label: "Research", role: "Signal Intelligence", icon: ScanSearch }, content_agent: { label: "Content", role: "Scripts & Narratives", icon: FileText }, production_agent: { label: "Production", role: "Visuals · Audio · Render", icon: Clapperboard }, publishing_agent: { label: "Publishing", role: "Release Operations", icon: Send }, engagement_agent: { label: "Engagement", role: "Audience Response", icon: MessageCircle }, analytics_agent: { label: "Analytics", role: "Performance Intelligence", icon: ChartNoAxesCombined } };
-function JarvisCore() { return <div className="watcher-shell" data-watcher-visual="true" data-jarvis-state="idle" aria-label="Jarvis, The Watcher, online and idle"><div className="watcher-ring watcher-ring-outer"/><div className="watcher-ring watcher-ring-inner"/><div className="watcher-segments"/><div className="watcher-grid"/><span className="watcher-particle watcher-particle-one"/><span className="watcher-particle watcher-particle-two"/><div className="watcher-iris" data-watcher-iris="true"><div className="watcher-lens" data-watcher-lens="true"/></div><span className="sr-only">The Watcher is idle</span></div>; }
+function JarvisCore({ state }: { state: JarvisVoiceState }) { return <div className="watcher-shell" data-watcher-visual="true" data-jarvis-state={state} aria-label={`Jarvis, The Watcher, ${state}`}><div className="watcher-ring watcher-ring-outer"/><div className="watcher-ring watcher-ring-inner"/><div className="watcher-segments"/><div className="watcher-grid"/><span className="watcher-particle watcher-particle-one"/><span className="watcher-particle watcher-particle-two"/><div className="watcher-iris" data-watcher-iris="true"><div className="watcher-lens" data-watcher-lens="true"/></div><span className="sr-only">Jarvis is {state}</span></div>; }
 const OPERATIONAL_STATE_KEYS = [
   "progress",
   "decision",
@@ -270,6 +271,9 @@ export function DigitalOffice({
   expanded,
   jarvisContextMode = false,
   jarvisContext,
+  jarvisState = 'idle',
+  onJarvisSpeak,
+  onJarvisCancel,
   onInspect,
   onRetryPipelines,
   onRetryDetail,
@@ -283,6 +287,9 @@ export function DigitalOffice({
   expanded: string | null;
   jarvisContextMode?: boolean;
   jarvisContext?: React.ReactNode;
+  jarvisState?: JarvisVoiceState;
+  onJarvisSpeak?: () => void;
+  onJarvisCancel?: () => void;
   onInspect?: (agentKey: string, runId?: string) => void;
   onRetryPipelines?: () => void;
   onRetryDetail?: (id: string) => void;
@@ -392,8 +399,8 @@ export function DigitalOffice({
         </div>
         <div className="jarvis-layout mt-7">
           <div className="jarvis-stage flex flex-col items-center text-center" data-jarvis-stage="true">
-            <JarvisCore />
-            <p className="mt-4 text-lg font-semibold tracking-[.55em] text-cyan-100">JARVIS</p><p className="mt-2 text-sm text-slate-200">Your AI Command Assistant</p><p className="mt-1 text-xs font-semibold tracking-[.2em] text-cyan-300">● ONLINE</p><button type="button" className="mt-4 inline-flex size-12 items-center justify-center rounded-full border border-cyan-300/70 bg-cyan-400/10 text-cyan-100 shadow-[0_0_28px_rgba(0,229,255,.35)]" aria-label="Tap to speak (voice control not yet available)" data-jarvis-microphone="true"><Mic className="size-5"/></button><p className="mt-2 text-xs text-cyan-200">Tap to speak</p>
+            <JarvisCore state={jarvisState} />
+            <p className="mt-4 text-lg font-semibold tracking-[.55em] text-cyan-100">JARVIS</p><p className="mt-2 text-sm text-slate-200">Your AI Command Assistant</p><p className="mt-1 text-xs font-semibold tracking-[.2em] text-cyan-300">● ONLINE</p><button type="button" onClick={jarvisState === 'idle' || jarvisState === 'error' ? onJarvisSpeak : onJarvisCancel} className="mt-4 rounded-full border border-cyan-300/40 bg-cyan-400/10 px-3 py-1 text-[10px] font-semibold tracking-[.16em] text-cyan-100" aria-label={jarvisState === 'idle' || jarvisState === 'error' ? 'Enable voice wake listening' : 'Mute voice'} data-jarvis-voice-control="true">{jarvisState === 'idle' || jarvisState === 'error' ? 'VOICE ON' : 'VOICE MUTE'}</button>
           </div>
           <aside className="jarvis-context-panel" data-jarvis-context-panel="true" aria-hidden={!jarvisContextMode} aria-label="Jarvis context panel">{jarvisContextMode ? jarvisContext ?? <p className="text-sm text-slate-300">Jarvis is preparing relevant operational context.</p> : null}</aside>
         </div>
@@ -508,6 +515,7 @@ export function AgentRunView() {
     [expanded, setExpanded] = React.useState<string | null>(null),
     [loading, setLoading] = React.useState(true),
     [error, setError] = React.useState<string | null>(null);
+  const jarvis = useJarvisVoice();
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
@@ -581,6 +589,11 @@ export function AgentRunView() {
           detailLoading={detailLoading}
           detailErrors={detailErrors}
           expanded={expanded}
+          jarvisState={jarvis.state}
+          jarvisContextMode={Boolean(jarvis.response?.contextualData.length)}
+          jarvisContext={jarvis.response ? <div className="space-y-3"><p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan-300">Jarvis response</p><p className="text-sm text-slate-100">{jarvis.response.answerText}</p>{jarvis.response.contextualData.map((item) => <p key={`${item.label}:${item.value}`} className="text-xs text-slate-300"><b>{item.label}</b> · {item.value}</p>)}</div> : null}
+          onJarvisSpeak={() => void jarvis.enableWake()}
+          onJarvisCancel={jarvis.disableWake}
           onInspect={(agentKey, runId) => void inspect(agentKey, runId)}
           onRetryDetail={(id) => void loadDetail(id)}
           onRetryPipelines={() => void load()}

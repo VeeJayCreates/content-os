@@ -100,7 +100,8 @@ test("renders the approved compact idle Digital Office without stale operational
 
   assert.match(markup, /JARVIS/);
   assert.match(markup, /data-watcher-visual="true"/);
-  assert.match(markup, /data-jarvis-microphone="true"/);
+  assert.match(markup, /data-jarvis-voice-control="true"/);
+  assert.doesNotMatch(markup, /Tap to speak/);
   for (const pod of ["research", "content", "production", "publishing", "engagement", "analytics"]) {
     assert.match(markup, new RegExp(`workforce-module--${pod}`));
   }

@@ -1,0 +1,2 @@
+export const JARVIS_STT_PROVIDER = Symbol('JARVIS_STT_PROVIDER');
+export const JARVIS_TTS_PROVIDER = Symbol('JARVIS_TTS_PROVIDER');

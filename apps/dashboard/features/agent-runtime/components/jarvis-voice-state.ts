@@ -1,0 +1,3 @@
+import type { JarvisVoiceState } from '@content-os/contracts';
+export const jarvisTransitions: Record<JarvisVoiceState, readonly JarvisVoiceState[]> = { idle: ['wake_listening'], wake_listening: ['listening', 'error', 'idle'], listening: ['transcribing', 'error', 'idle'], followup_listening: ['listening', 'wake_listening', 'error', 'idle'], transcribing: ['thinking', 'error'], thinking: ['speaking', 'error'], speaking: ['followup_listening', 'wake_listening', 'error'], error: ['wake_listening', 'idle'], approval_required: ['idle'] };
+export const canTransitionJarvis = (from: JarvisVoiceState, to: JarvisVoiceState) => jarvisTransitions[from].includes(to);

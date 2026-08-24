@@ -24,4 +24,5 @@ export * from "./script.js";
 export * from "./content-style-profile.js";
 export * from "./agent-runtime.js";
 export * from "./agent-pipeline.js";
+export * from "./jarvis.js";
 export * from "./enums.js";
