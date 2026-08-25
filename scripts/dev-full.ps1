@@ -3,6 +3,9 @@ $ErrorActionPreference = "Stop"
 $WhisperServer = "D:\Social media\local-ai\whisper.cpp\build\bin\Release\whisper-server.exe"
 $WhisperModel = "D:\Social media\local-ai\whisper.cpp\ggml-base.bin"
 $Supertonic = "D:\Social media\local-ai\supertonic-runtime\.venv\Scripts\supertonic.exe"
+$LlamaServer = "D:\Social media\llama.cpp\llama-server.exe"
+$EmbeddingModel = "D:\Social media\ContentOS-Models\qwen3-emb-0.6b-Q4_K_M.gguf"
+$RerankerModel = "D:\Social media\ContentOS-Models\bge-reranker-v2-m3-Q4_K_M.gguf"
 
 $Root = Split-Path -Parent $PSScriptRoot
 $Children = @()
@@ -76,7 +79,14 @@ function Start-ManagedService {
     Write-Host "[OK] $Name started on port $Port"
 }
 
-foreach ($requiredFile in @($WhisperServer, $WhisperModel, $Supertonic)) {
+foreach ($requiredFile in @(
+    $WhisperServer,
+    $WhisperModel,
+    $Supertonic,
+    $LlamaServer,
+    $EmbeddingModel,
+    $RerankerModel
+)) {
     if (-not (Test-Path -LiteralPath $requiredFile)) {
         throw "Required local runtime file is missing: $requiredFile"
     }
@@ -85,9 +95,16 @@ foreach ($requiredFile in @($WhisperServer, $WhisperModel, $Supertonic)) {
 $JarvisEnvironment = @{
     JARVIS_STT_PROVIDER = "whisper-cpp"
     LOCAL_WHISPER_URL = "http://127.0.0.1:8080"
+
     JARVIS_TTS_PROVIDER = "supertonic"
     SUPERTONIC_URL = "http://127.0.0.1:7788"
     JARVIS_TTS_VOICE = "M1"
+
+    AI_LOCAL_EMBEDDING_BASE_URL = "http://127.0.0.1:8082"
+    AI_LOCAL_EMBEDDING_MODEL = "Qwen3-Embedding-0.6B"
+
+    AI_LOCAL_RERANK_BASE_URL = "http://127.0.0.1:8083"
+    AI_LOCAL_RERANK_MODEL = "bge-reranker-v2-m3"
 }
 
 Write-Host ""
@@ -102,6 +119,18 @@ try {
         -Port 8080 `
         -FileName $WhisperServer `
         -Arguments "-m `"$WhisperModel`" --host 127.0.0.1 --port 8080"
+
+    Start-ManagedService `
+        -Name "Qwen Embedding" `
+        -Port 8082 `
+        -FileName $LlamaServer `
+        -Arguments "--model `"$EmbeddingModel`" --host 127.0.0.1 --port 8082 --embedding --alias Qwen3-Embedding-0.6B"
+
+    Start-ManagedService `
+        -Name "BGE Reranker" `
+        -Port 8083 `
+        -FileName $LlamaServer `
+        -Arguments "--model `"$RerankerModel`" --host 127.0.0.1 --port 8083 --rerank --alias bge-reranker-v2-m3"
 
     Start-ManagedService `
         -Name "Supertonic" `
@@ -126,10 +155,12 @@ try {
     Write-Host "========================================"
     Write-Host "ContentOS ready"
     Write-Host "========================================"
-    Write-Host "Whisper    : http://127.0.0.1:8080"
-    Write-Host "Supertonic : http://127.0.0.1:7788"
-    Write-Host "API        : http://localhost:3001"
-    Write-Host "Dashboard  : http://localhost:3000"
+    Write-Host "Whisper        : http://127.0.0.1:8080"
+    Write-Host "Qwen Embedding : http://127.0.0.1:8082"
+    Write-Host "BGE Reranker   : http://127.0.0.1:8083"
+    Write-Host "Supertonic     : http://127.0.0.1:7788"
+    Write-Host "API            : http://localhost:3001"
+    Write-Host "Dashboard      : http://localhost:3000"
     Write-Host ""
     Write-Host "Press Ctrl+C to stop services started by this launcher."
     Write-Host ""
