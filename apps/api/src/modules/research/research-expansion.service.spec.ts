@@ -23,10 +23,26 @@ describe('ResearchExpansionService', () => {
   const ingestion = { ingest: jest.fn() };
   const packages = { generate: jest.fn(), findOne: jest.fn() };
   const evidence = { resolveOpportunityEvidence: jest.fn() };
-  const service = new ResearchExpansionService(opportunities as never, sources as never, signals as never, candidates as never, expansions as never, packageRecords as never, ingestion as never, packages as never, evidence as never);
+  const semanticClustering = { cluster: jest.fn() };
+  const externalDiscovery = { discover: jest.fn() };
+  const service = new ResearchExpansionService(
+    opportunities as never,
+    sources as never,
+    signals as never,
+    candidates as never,
+    expansions as never,
+    packageRecords as never,
+    ingestion as never,
+    packages as never,
+    evidence as never,
+    semanticClustering as never,
+    externalDiscovery as never,
+  );
 
   beforeEach(() => {
     jest.resetAllMocks();
+    semanticClustering.cluster.mockResolvedValue([]);
+    externalDiscovery.discover.mockResolvedValue({ queriesPlanned: 0, acceptedResults: 0, results: [], });
     opportunities.findById.mockResolvedValue(opportunity);
     packageRecords.findByOpportunityId.mockResolvedValue({ id: 'package-1' });
     packages.generate.mockResolvedValue({ packageId: 'package-1' });
@@ -55,6 +71,31 @@ describe('ResearchExpansionService', () => {
     expect(packages.generate).not.toHaveBeenCalled();
     expect(ingestion.ingest).not.toHaveBeenCalled();
     expect(expansions.upsert).not.toHaveBeenCalled();
+  });
+
+  it('re-verifies when relevant evidence is already attached to the opportunity', async () => {
+    candidates.attachToOpportunity.mockResolvedValue(false);
+
+    packages.findOne
+      .mockResolvedValueOnce(detail())
+      .mockResolvedValueOnce(
+        detail('corroborated', ['source-a', 'source-b']),
+      );
+
+    const result = await service.expand('topic-1');
+
+    expect(candidates.attachToOpportunity).toHaveBeenCalled();
+
+    expect(packages.generate).toHaveBeenCalledWith('topic-1');
+
+    expect(result).toMatchObject({
+      status: 'expanded',
+      candidateEvidenceAccepted: 0,
+      duplicateEvidenceRejected: 1,
+      verification: {
+        verificationStatus: 'corroborated',
+      },
+    });
   });
 
   it.each(['single_source', 'insufficient'])('attempts expansion for %s topics', async (status) => {
@@ -92,9 +133,164 @@ describe('ResearchExpansionService', () => {
     expect(result).toMatchObject({ status: 'expanded', candidateEvidenceAccepted: 1, verification: { verificationStatus: 'corroborated' } });
   });
 
-  it('does not accept a sibling candidate from a multi-story signal', async () => {
-    signals.findAll.mockResolvedValue([{ id: 'signal-b', projectId: 'project-1', researchSourceId: 'source-b', title: 'Japan F-2 | Honey Trap', url: 'https://b.test', summary: null, discoveredAt: 'x' }]);
+  it('accepts a semantically confirmed paraphrase from a distinct source then re-verifies', async () => {
+    signals.findAll.mockResolvedValue([
+      {
+        id: 'signal-b',
+        projectId: 'project-1',
+        researchSourceId: 'source-b',
+        title: 'France and India advance cooperation on the FCAS programme',
+        url: 'https://b.test',
+        summary: null,
+        discoveredAt: 'x',
+      },
+    ]);
+
+    semanticClustering.cluster.mockImplementation(async (inputs) => {
+      const claim = inputs.find((input: { id: string }) =>
+        input.id.startsWith('claim:'),
+      );
+
+      const candidate = inputs.find((input: { id: string }) =>
+        input.id.startsWith('candidate:'),
+      );
+
+      if (!claim || !candidate) return [];
+
+      return [
+        {
+          candidateIds: [claim.id, candidate.id],
+          titleCandidateId: claim.id,
+          clusterKey: 'cluster-1',
+        },
+      ];
+    });
+
+    packages.findOne
+      .mockResolvedValueOnce(detail())
+      .mockResolvedValueOnce(
+        detail('corroborated', ['source-a', 'source-b']),
+      );
+
     const result = await service.expand('topic-1');
+
+    expect(semanticClustering.cluster).toHaveBeenCalled();
+    expect(candidates.attachToOpportunity).toHaveBeenCalledWith(
+      'topic-1',
+      'candidate-b',
+    );
+
+    expect(result).toMatchObject({
+      status: 'expanded',
+      candidateEvidenceAccepted: 1,
+      verification: {
+        verificationStatus: 'corroborated',
+      },
+    });
+  });
+
+  it('falls back to external discovery when configured sources do not produce evidence', async () => {
+    signals.findAll
+      .mockResolvedValueOnce([
+        {
+          id: 'signal-b',
+          projectId: 'project-1',
+          researchSourceId: 'source-b',
+          title: 'Unrelated story',
+          url: 'https://b.test',
+          summary: null,
+          discoveredAt: 'x',
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'signal-c',
+          projectId: 'project-1',
+          researchSourceId: 'source-c',
+          title: 'France and India advance cooperation on the FCAS programme',
+          url: 'https://reuters.com/story-c',
+          summary: null,
+          discoveredAt: 'x',
+        },
+      ]);
+
+    externalDiscovery.discover.mockResolvedValue({
+      queriesPlanned: 1,
+      acceptedResults: 1,
+      results: [
+        {
+          sourceId: 'source-c',
+          url: 'https://reuters.com/story-c',
+          title: 'France and India advance cooperation on the FCAS programme',
+        },
+      ],
+    });
+
+    semanticClustering.cluster.mockImplementation(async (inputs) => {
+      const candidate = inputs.find((input: {
+        id: string;
+        text: string;
+      }) => input.id.startsWith('candidate:'));
+
+      if (
+        !candidate ||
+        candidate.text === 'Unrelated story'
+      ) {
+        return [];
+      }
+
+      const claim = inputs.find((input: {
+        id: string;
+        text: string;
+      }) => input.id.startsWith('claim:'));
+
+      if (!claim) return [];
+
+      return [
+        {
+          candidateIds: [claim.id, candidate.id],
+          titleCandidateId: claim.id,
+          clusterKey: 'cluster-1',
+        },
+      ];
+    });
+
+    packages.findOne
+      .mockResolvedValueOnce(detail())
+      .mockResolvedValueOnce(
+        detail('corroborated', ['source-a', 'source-c']),
+      );
+
+    const result = await service.expand('topic-1');
+
+    expect(externalDiscovery.discover).toHaveBeenCalled();
+    expect(candidates.attachToOpportunity).toHaveBeenCalledWith(
+      'topic-1',
+      'candidate-b',
+    );
+
+    expect(result.status).toBe('expanded');
+  });
+
+  it('rejects unrelated sibling candidates when semantic matching does not confirm them', async () => {
+    signals.findAll.mockResolvedValue([
+      {
+        id: 'signal-b',
+        projectId: 'project-1',
+        researchSourceId: 'source-b',
+        title: 'Japan F-2 | Honey Trap',
+        url: 'https://b.test',
+        summary: null,
+        discoveredAt: 'x',
+      },
+    ]);
+
+    semanticClustering.cluster.mockResolvedValue([]);
+
+    const result = await service.expand('topic-1');
+
+    expect(semanticClustering.cluster).toHaveBeenCalled();
+    expect(candidates.upsert).not.toHaveBeenCalled();
     expect(candidates.attachToOpportunity).not.toHaveBeenCalled();
     expect(result.candidateEvidenceAccepted).toBe(0);
   });

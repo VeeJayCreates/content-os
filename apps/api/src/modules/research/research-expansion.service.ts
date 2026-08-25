@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { SemanticTopicClusteringService } from './semantic-topic-clustering.service';
+import { ExternalResearchDiscoveryService } from './external-research-discovery.service';
 import {
   ResearchSourceRole,
   ResearchSourceType,
@@ -24,8 +26,8 @@ import { normalizeClaimKey } from './research-package';
 import { evaluateResearchVerification } from './research-verification';
 
 const MAX_ATTEMPTS = 2;
-const MAX_SOURCES_PER_ATTEMPT = 2;
-const MAX_NEW_EVIDENCE = 4;
+const MAX_SOURCES_PER_ATTEMPT = 6;
+const MAX_NEW_EVIDENCE = 8;
 
 /**
  * Bounded, topic-local refresh of configured RSS verification sources. There
@@ -44,7 +46,56 @@ export class ResearchExpansionService {
     private readonly ingestion: IngestionService,
     private readonly packages: ResearchPackageService,
     private readonly evidence: OpportunityEvidenceService,
+    private readonly semanticClustering: SemanticTopicClusteringService,
+    private readonly externalDiscovery: ExternalResearchDiscoveryService,
   ) {}
+
+  private async findSemanticMatches(
+    projectId: string,
+    claims: string[],
+    candidates: Array<{ text: string; normalizedText: string }>,
+  ) {
+    if (!claims.length || !candidates.length) return [];
+
+    const claimInputs = claims.map((claim, index) => ({
+      id: `claim:${index}`,
+      projectId,
+      text: claim,
+      normalizedText: claim,
+    }));
+
+    const candidateInputs = candidates.map((candidate, index) => ({
+      id: `candidate:${index}`,
+      projectId,
+      text: candidate.text,
+      normalizedText: candidate.normalizedText,
+    }));
+
+    const clusters = await this.semanticClustering.cluster([
+      ...claimInputs,
+      ...candidateInputs,
+    ]);
+
+    const matchedCandidateIds = new Set<string>();
+
+    for (const cluster of clusters) {
+      const containsClaim = cluster.candidateIds.some((id) =>
+        id.startsWith('claim:'),
+      );
+
+      if (!containsClaim) continue;
+
+      for (const id of cluster.candidateIds) {
+        if (id.startsWith('candidate:')) {
+          matchedCandidateIds.add(id);
+        }
+      }
+    }
+
+    return candidates.filter((_, index) =>
+      matchedCandidateIds.has(`candidate:${index}`),
+    );
+  }
 
   async expand(opportunityId: string): Promise<ResearchExpansionResult> {
     const startedAt = Date.now();
@@ -67,7 +118,11 @@ export class ResearchExpansionService {
     }
     const sources = (await this.sources.findAll(opportunity.projectId))
       .filter((source) => source.enabled)
-      .filter((source) => source.sourceType === ResearchSourceType.RSS)
+      .filter(
+        (source) =>
+          source.sourceType === ResearchSourceType.RSS ||
+          source.sourceType === ResearchSourceType.YOUTUBE,
+      )
       .filter((source) => source.role === ResearchSourceRole.VERIFICATION || source.role === ResearchSourceRole.BOTH)
       .filter((source) => !existingSourceIds.has(source.id))
       .slice(0, MAX_SOURCES_PER_ATTEMPT);
@@ -89,11 +144,49 @@ export class ResearchExpansionService {
         const sourceSignals = await this.signals.findAll(opportunity.projectId, source.id);
         for (const signal of sourceSignals) {
           if (accepted >= MAX_NEW_EVIDENCE) break;
-          for (const candidate of extractTopicCandidates(signal.title)) {
-            if (!claims.includes(candidate.normalizedText)) continue;
-            const stored = await this.candidates.upsert({ projectId: opportunity.projectId, signalId: signal.id, ...candidate });
-            if (await this.candidates.attachToOpportunity(opportunityId, stored.id)) accepted += 1;
-            else duplicates += 1;
+          const extracted = extractTopicCandidates(signal.title);
+
+          const exactMatches = extracted.filter((candidate) =>
+            claims.includes(candidate.normalizedText),
+          );
+
+          const unmatched = extracted.filter(
+            (candidate) => !claims.includes(candidate.normalizedText),
+          );
+
+          const semanticMatches =
+            unmatched.length > 0
+              ? await this.findSemanticMatches(
+                  opportunity.projectId,
+                  claims,
+                  unmatched,
+                )
+              : [];
+
+          const acceptedCandidates = [
+            ...exactMatches,
+            ...semanticMatches,
+          ];
+
+          for (const candidate of acceptedCandidates) {
+            if (accepted >= MAX_NEW_EVIDENCE) break;
+
+            const stored = await this.candidates.upsert({
+              projectId: opportunity.projectId,
+              signalId: signal.id,
+              ...candidate,
+            });
+
+            if (
+              await this.candidates.attachToOpportunity(
+                opportunityId,
+                stored.id,
+              )
+            ) {
+              accepted += 1;
+            } else {
+              duplicates += 1;
+            }
           }
         }
       } catch {
@@ -101,7 +194,73 @@ export class ResearchExpansionService {
         warnings.push(`Configured source '${source.name}' could not be refreshed.`);
       }
     }
-    if (accepted > 0) current = await this.ensurePackage(opportunityId);
+    if (accepted === 0) {
+      const discovery = await this.externalDiscovery.discover({
+        projectId: opportunity.projectId,
+        queries: claims.slice(0, 3),
+      });
+
+      if (discovery.acceptedResults > 0) {
+        const discoveredSignals = await this.signals.findAll(opportunity.projectId);
+
+        const discoveredByUrl = new Map(
+          discovery.results.map((result) => [result.url, result]),
+        );
+
+        for (const signal of discoveredSignals) {
+          if (accepted >= MAX_NEW_EVIDENCE) break;
+          if (!discoveredByUrl.has(signal.url)) continue;
+
+          const extracted = extractTopicCandidates(signal.title);
+
+          const exactMatches = extracted.filter((candidate) =>
+            claims.includes(candidate.normalizedText),
+          );
+
+          const unmatched = extracted.filter(
+            (candidate) => !claims.includes(candidate.normalizedText),
+          );
+
+          const semanticMatches =
+            unmatched.length > 0
+              ? await this.findSemanticMatches(
+                  opportunity.projectId,
+                  claims,
+                  unmatched,
+                )
+              : [];
+
+          const acceptedCandidates = [
+            ...exactMatches,
+            ...semanticMatches,
+          ];
+
+          for (const candidate of acceptedCandidates) {
+            if (accepted >= MAX_NEW_EVIDENCE) break;
+
+            const stored = await this.candidates.upsert({
+              projectId: opportunity.projectId,
+              signalId: signal.id,
+              ...candidate,
+            });
+
+            if (
+              await this.candidates.attachToOpportunity(
+                opportunityId,
+                stored.id,
+              )
+            ) {
+              accepted += 1;
+            } else {
+              duplicates += 1;
+            }
+          }
+        }
+      }
+    }
+    if (accepted > 0 || duplicates > 0) {
+      current = await this.ensurePackage(opportunityId);
+    }
     const verification = current?.verification ?? initial;
     const status = verification.verificationStatus === ResearchVerificationStatus.CORROBORATED ? 'expanded' : 'exhausted';
     await this.expansions.upsert({

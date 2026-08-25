@@ -25,10 +25,12 @@ const signal = {
 
 describe('OpportunityEvidenceService', () => {
   const opportunities = { findSignalsByOpportunityIds: jest.fn() };
+
   const candidates = {
     membershipCountsByOpportunityIds: jest.fn(),
     findByOpportunityIds: jest.fn(),
   };
+
   const service = new OpportunityEvidenceService(
     opportunities as never,
     candidates as never,
@@ -36,10 +38,20 @@ describe('OpportunityEvidenceService', () => {
 
   beforeEach(() => jest.resetAllMocks());
 
-  it('uses only candidate-backed evidence for a V2 opportunity', async () => {
+  it('merges valid legacy evidence with candidate-backed evidence for a V2 opportunity', async () => {
+    const legacySignal = {
+      ...signal,
+      id: 'signal-legacy',
+      researchSourceId: 'source-legacy',
+      sourceName: 'Original channel',
+      url: 'https://example.test/original-video',
+      externalId: 'original-video',
+    };
+
     candidates.membershipCountsByOpportunityIds.mockResolvedValue(
       new Map([['opportunity-fcas', 1]]),
     );
+
     candidates.findByOpportunityIds.mockResolvedValue(
       new Map([
         [
@@ -58,33 +70,81 @@ describe('OpportunityEvidenceService', () => {
       ]),
     );
 
-    const resolved = await service.resolveOpportunityEvidence('opportunity-fcas');
+    opportunities.findSignalsByOpportunityIds.mockResolvedValue(
+      new Map([['opportunity-fcas', [legacySignal]]]),
+    );
+
+    const resolved =
+      await service.resolveOpportunityEvidence('opportunity-fcas');
 
     expect(resolved).toMatchObject({
       kind: 'candidate',
-      candidates: [{ candidateId: 'candidate-fcas', candidateText: 'India-France FCAS sixth-generation fighter programme' }],
-      signals: [{ id: signal.id, sourceName: 'Channel one' }],
+      candidates: [
+        {
+          candidateId: 'candidate-fcas',
+          candidateText:
+            'India-France FCAS sixth-generation fighter programme',
+        },
+      ],
     });
-    expect(opportunities.findSignalsByOpportunityIds).not.toHaveBeenCalled();
+
+    expect(resolved.signals).toHaveLength(2);
+
+    expect(resolved.signals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'signal-legacy',
+          researchSourceId: 'source-legacy',
+        }),
+        expect.objectContaining({
+          id: 'signal-1',
+          researchSourceId: 'source-1',
+        }),
+      ]),
+    );
+
+    expect(
+      opportunities.findSignalsByOpportunityIds,
+    ).toHaveBeenCalledWith(['opportunity-fcas']);
   });
 
-  it('does not duplicate a parent Signal when an opportunity has multiple candidates from it', async () => {
+  it('does not duplicate a parent Signal when it exists through both legacy and candidate evidence', async () => {
     candidates.membershipCountsByOpportunityIds.mockResolvedValue(
       new Map([['opportunity-1', 2]]),
     );
+
     candidates.findByOpportunityIds.mockResolvedValue(
       new Map([
         [
           'opportunity-1',
           [
-            { id: 'candidate-1', signalId: signal.id, text: 'Candidate A', signal, sourceId: signal.researchSourceId, sourceName: signal.sourceName },
-            { id: 'candidate-2', signalId: signal.id, text: 'Candidate B', signal, sourceId: signal.researchSourceId, sourceName: signal.sourceName },
+            {
+              id: 'candidate-1',
+              signalId: signal.id,
+              text: 'Candidate A',
+              signal,
+              sourceId: signal.researchSourceId,
+              sourceName: signal.sourceName,
+            },
+            {
+              id: 'candidate-2',
+              signalId: signal.id,
+              text: 'Candidate B',
+              signal,
+              sourceId: signal.researchSourceId,
+              sourceName: signal.sourceName,
+            },
           ],
         ],
       ]),
     );
 
-    const resolved = await service.resolveOpportunityEvidence('opportunity-1');
+    opportunities.findSignalsByOpportunityIds.mockResolvedValue(
+      new Map([['opportunity-1', [signal]]]),
+    );
+
+    const resolved =
+      await service.resolveOpportunityEvidence('opportunity-1');
 
     expect(resolved.signals).toHaveLength(1);
     expect(resolved.kind).toBe('candidate');
@@ -93,11 +153,14 @@ describe('OpportunityEvidenceService', () => {
   it('uses legacy opportunity_signals only when no candidate membership exists', async () => {
     candidates.membershipCountsByOpportunityIds.mockResolvedValue(new Map());
     candidates.findByOpportunityIds.mockResolvedValue(new Map());
+
     opportunities.findSignalsByOpportunityIds.mockResolvedValue(
       new Map([['legacy-opportunity', [signal]]]),
     );
 
-    await expect(service.resolveOpportunityEvidence('legacy-opportunity')).resolves.toEqual({
+    await expect(
+      service.resolveOpportunityEvidence('legacy-opportunity'),
+    ).resolves.toEqual({
       kind: 'legacy',
       candidates: [],
       signals: [signal],
@@ -108,11 +171,17 @@ describe('OpportunityEvidenceService', () => {
     candidates.membershipCountsByOpportunityIds.mockResolvedValue(
       new Map([['opportunity-1', 1]]),
     );
+
     candidates.findByOpportunityIds.mockResolvedValue(new Map());
 
-    await expect(service.resolveOpportunityEvidence('opportunity-1')).rejects.toMatchObject({
+    await expect(
+      service.resolveOpportunityEvidence('opportunity-1'),
+    ).rejects.toMatchObject({
       category: 'candidate_parent_data_missing',
     } satisfies Partial<OpportunityEvidenceResolutionError>);
-    expect(opportunities.findSignalsByOpportunityIds).not.toHaveBeenCalled();
+
+    expect(
+      opportunities.findSignalsByOpportunityIds,
+    ).not.toHaveBeenCalled();
   });
 });

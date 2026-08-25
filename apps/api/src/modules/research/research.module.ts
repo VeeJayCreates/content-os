@@ -40,6 +40,9 @@ import { PexelsVisualAssetProvider } from './pexels-visual-asset.provider';
 import { VisualAssetAcquisitionWorkflowService } from './visual-asset-acquisition-workflow.service';
 import { EDITORIAL_ASSESSMENT_EVALUATOR, OpenAiEditorialAssessmentEvaluator } from './editorial-assessment.evaluator';
 import { AgentRuntimeModule } from '../agent-runtime/agent-runtime.module';
+import { ExternalResearchDiscoveryService } from './external-research-discovery.service';
+import { YouTubeResearchSearchProvider } from './youtube-research-search.provider';
+import { EXTERNAL_RESEARCH_SEARCH_PROVIDER } from './external-research-discovery.tokens';
 
 @Module({
   imports: [StorageModule, AiRuntimeModule, AgentRuntimeModule],
@@ -65,6 +68,12 @@ import { AgentRuntimeModule } from '../agent-runtime/agent-runtime.module';
     OpportunityService,
     OpportunityEvidenceService,
     ResearchExpansionService,
+    ExternalResearchDiscoveryService,
+    YouTubeResearchSearchProvider,
+    {
+      provide: EXTERNAL_RESEARCH_SEARCH_PROVIDER,
+      useExisting: YouTubeResearchSearchProvider,
+    },
     ProductionQueueService,
     ProductionQueueContentAngleService,
     ProductionQueueContentAngleBatchService,

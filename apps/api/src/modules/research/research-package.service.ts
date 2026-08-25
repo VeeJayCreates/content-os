@@ -126,9 +126,20 @@ export class ResearchPackageService {
         string,
         { claim: string; normalizedClaimKey: string; signalIds: string[] }
       >();
+
+      const candidateSignalIds = new Set(
+        resolvedEvidence.candidates.map((candidate) => candidate.signal.id),
+      );
+
+      const signalSourceById = new Map(
+        signals.map((signal) => [signal.id, signal.researchSourceId]),
+      );
+
+      // Candidate-backed facts retain only their actual candidate evidence.
       for (const candidate of resolvedEvidence.candidates) {
         const normalizedClaimKey = normalizeClaimKey(candidate.candidateText);
         const existing = facts.get(normalizedClaimKey);
+
         if (existing) {
           existing.signalIds.push(candidate.signal.id);
         } else {
@@ -139,16 +150,55 @@ export class ResearchPackageService {
           });
         }
       }
+
+      // Signals inherited from the legacy opportunity path support the original
+      // opportunity claim. Do not attach them indiscriminately to candidate facts.
+      const legacySignals = signals.filter(
+        (signal) => !candidateSignalIds.has(signal.id),
+      );
+
+      if (legacySignals.length > 0) {
+        const normalizedOpportunityKey = normalizeClaimKey(opportunity.title);
+        const existing = facts.get(normalizedOpportunityKey);
+
+        if (existing) {
+          existing.signalIds.push(
+            ...legacySignals.map((signal) => signal.id),
+          );
+        } else {
+          facts.set(normalizedOpportunityKey, {
+            claim: opportunity.title,
+            normalizedClaimKey: normalizedOpportunityKey,
+            signalIds: legacySignals.map((signal) => signal.id),
+          });
+        }
+      }
+
+      const replacements = [...facts.values()].map((fact) => {
+        const factSourceCount = new Set(
+          fact.signalIds
+            .map((signalId) => signalSourceById.get(signalId))
+            .filter((sourceId): sourceId is string => Boolean(sourceId)),
+        ).size;
+
+        return {
+          ...fact,
+          signalIds: [...new Set(fact.signalIds)],
+          confidence: confidenceScore,
+          status: factStatusForSources(factSourceCount),
+        };
+      });
+
       const replacement = await this.packages.replaceFactsWithEvidence(
         researchPackage.id,
-        [...facts.values()].map((fact) => ({
-          ...fact,
-          confidence: confidenceScore,
-          status: factStatusForSources(sourceCount),
-        })),
+        replacements,
       );
-      if (replacement.previousFactCount > 0) factsUpdated = facts.size;
-      else factsCreated = facts.size;
+
+      if (replacement.previousFactCount > 0) {
+        factsUpdated = replacements.length;
+      } else {
+        factsCreated = replacements.length;
+      }
     } else {
       const fact = {
         claim: opportunity.title,

@@ -32,8 +32,9 @@ export type ResolvedOpportunityEvidence =
     };
 
 /**
- * Candidate memberships are the semantic authority for V2 Topics. Legacy
- * opportunities retain their existing opportunity_signals evidence path.
+ * Candidate memberships are the semantic authority for V2 Topics.
+ * Legacy opportunity_signals remain valid supporting evidence and are
+ * merged with candidate-backed Signals after candidate integrity is verified.
  */
 @Injectable()
 export class OpportunityEvidenceService {
@@ -64,10 +65,19 @@ export class OpportunityEvidenceService {
         candidateText: candidate.text,
         signal: { ...candidate.signal, sourceName: candidate.sourceName },
       }));
+
+      const legacySignals =
+        (
+          await this.opportunities.findSignalsByOpportunityIds([opportunityId])
+        ).get(opportunityId) ?? [];
+
       return {
         kind: 'candidate',
         candidates: evidence,
-        signals: distinctSignals(evidence.map((item) => item.signal)),
+        signals: distinctSignals([
+          ...legacySignals,
+          ...evidence.map((item) => item.signal),
+        ]),
       };
     }
 
