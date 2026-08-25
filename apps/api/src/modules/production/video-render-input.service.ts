@@ -27,7 +27,6 @@ export class VideoRenderInputService{
   if(!audio)return this.fail(composition,VideoRenderInputFailureCode.AUDIO_NOT_FOUND,'Audio Generation is required');
   if(audio.status!==AudioGenerationStatus.READY)return this.fail(composition,VideoRenderInputFailureCode.AUDIO_NOT_READY,'Audio Generation is not ready');
   if(audio.id!==composition.audioGenerationId||audio.inputHash!==composition.audioInputHash||audio.scenePlanId!==composition.scenePlanId)return this.fail(composition,VideoRenderInputFailureCode.AUDIO_STALE,'Audio Generation identity is stale');
-  if(!audio.outputPath?.trim())return this.fail(composition,VideoRenderInputFailureCode.AUDIO_OUTPUT_MISSING,'Audio Generation output reference is missing');
   if(!visual||visual.id!==composition.visualAssetManifestId||visual.inputHash!==composition.visualManifestInputHash||visual.scenePlanId!==composition.scenePlanId||visual.scenePlanInputHash!==composition.scenePlanInputHash)return this.fail(composition,VideoRenderInputFailureCode.COMPOSITION_STALE,'Composition upstream identity is stale');
   if(visual.status!==VisualAssetManifestStatus.READY)return this.fail(composition,VideoRenderInputFailureCode.COMPOSITION_STALE,'Visual asset manifest is not ready');
   if(composition.scenes.length!==audio.segments.length||composition.sceneCount!==composition.scenes.length)return this.fail(composition,VideoRenderInputFailureCode.COMPOSITION_STALE,'Composition scene identity is stale');
