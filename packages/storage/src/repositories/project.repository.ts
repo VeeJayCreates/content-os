@@ -41,6 +41,18 @@ export class ProjectRepository {
 	  return (await this.findById(project.id))!;
 	}
 
+  async updateStatus(id: string, status: Project['status']): Promise<Project | undefined> {
+    await db
+      .update(projects)
+      .set({
+        status,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(projects.id, id));
+
+    return this.findById(id);
+  }
+
   async delete(id: string): Promise<void> {
     await db.delete(projects).where(eq(projects.id, id));
   }

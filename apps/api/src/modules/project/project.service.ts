@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 
 import { ProjectRepository } from '@content-os/storage';
-
+import { ProjectStatus } from '@content-os/contracts';
 import { CreateProjectDto } from './dto/create-project.dto';
 
 @Injectable()
@@ -34,6 +34,16 @@ export class ProjectService {
       contentType: dto.contentType,
       status: dto.status,
     });
+  }
+
+  async updateStatus(id: string, status: ProjectStatus) {
+    const project = await this.projectRepository.findById(id);
+
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+
+    return this.projectRepository.updateStatus(id, status);
   }
 
   async remove(id: string) {
