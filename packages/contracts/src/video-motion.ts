@@ -1,0 +1,10 @@
+export type VideoCameraMotion='static'|'zoom_in'|'zoom_out'|'pan_left'|'pan_right'|'ken_burns';
+export type VideoTransition='cut'|'fade'|'slide_left'|'slide_right'|'wipe_left'|'wipe_right';
+export type VideoMotionOverlayType='title'|'subtitle'|'label'|'statistic';
+export type VideoMotionPlanStatus='ready'|'failed'|'stale';
+export interface VideoMotionOverlay{type:VideoMotionOverlayType;text:string;startMs:number;endMs:number;position:'top'|'center'|'bottom';}
+export interface VideoMotionMapMarker{latitude:number;longitude:number;label?:string;}
+export interface VideoMotionMapRoute{points:Array<{latitude:number;longitude:number}>;label?:string;}
+export interface VideoMotionMapChoreography{focus:string;markers?:VideoMotionMapMarker[];routes?:VideoMotionMapRoute[];}
+export interface VideoMotionScene{id:string;motionPlanId:string;sceneIndex:number;compositionSceneId:string;plannedSceneId:string;cameraMotion:VideoCameraMotion;transition:VideoTransition;overlays:VideoMotionOverlay[];map:VideoMotionMapChoreography|null;}
+export interface VideoMotionPlan{id:string;projectId:string;contentScriptId:string;videoCompositionPlanId:string;compositionInputHash:string;version:string;inputHash:string;status:VideoMotionPlanStatus;createdAt:string;updatedAt:string;scenes:VideoMotionScene[];}

@@ -16,6 +16,7 @@ export * from "./audio.js";
 export * from "./visual-asset.js";
 export * from "./media-asset.js";
 export * from "./video-composition.js";
+export * from "./video-motion.js";
 export * from "./video-render.js";
 export * from "./asset.js";
 export * from "./api.js";

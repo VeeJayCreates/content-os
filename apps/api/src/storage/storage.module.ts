@@ -28,6 +28,7 @@ import {
   MediaAssetRepository,
   VideoRenderInputRepository,
   VideoRenderJobRepository,
+  VideoMotionRepository,
   AgentRuntimeRepository,
   AgentPipelineRepository,
 } from '@content-os/storage';
@@ -61,6 +62,7 @@ import {
     MediaAssetRepository,
     VideoRenderInputRepository,
     VideoRenderJobRepository,
+    VideoMotionRepository,
     AgentRuntimeRepository,
     AgentPipelineRepository,
   ],

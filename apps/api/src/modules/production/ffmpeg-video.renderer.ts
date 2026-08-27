@@ -20,6 +20,8 @@ import {
   type MediaStorageProvider,
 } from '../media/media-storage-provider';
 import type { RenderedVideo, VideoRenderer } from './video-renderer';
+import { remotionMotionEntrySource, type RemotionMotionScene } from './remotion-motion.runtime';
+import { validateMotionScenes } from './video-motion.validation';
 
 export type RendererOutputQuota = { path: string; maxBytes: number };
 export type RendererCommand = (
@@ -223,14 +225,12 @@ export class FfmpegVideoRenderer implements VideoRenderer {
     const publicDir = join(dir, 'public');
     await mkdir(publicDir, { recursive: true });
     const aggregate = { bytes: 0 };
-    const props: {
-      scenes: Array<{
-        durationInFrames: number;
-        audio: string;
-        media?: string;
-        mediaType?: string;
-      }>;
-    } = { scenes: [] };
+    const hasMotion = manifest.scenes.some((scene) => scene.motion !== null && scene.motion !== undefined);
+    if (hasMotion) {
+      if (!manifest.scenes.every((scene) => scene.motion !== null && scene.motion !== undefined)) throw new Error('invalid_motion_plan');
+      try { validateMotionScenes(manifest.scenes.map((scene) => scene.motion), manifest.scenes.map((scene) => scene.durationMs)); } catch { throw new Error('invalid_motion_plan'); }
+    }
+    const props: { scenes: RemotionMotionScene[] } = { scenes: [] };
     let previousFrame = 0;
     for (let index = 0; index < manifest.scenes.length; index++) {
       const scene = manifest.scenes[index],
@@ -263,12 +263,7 @@ export class FfmpegVideoRenderer implements VideoRenderer {
       const durationInFrames = endFrame - previousFrame;
       if (durationInFrames < 1) throw new Error('invalid_timeline');
       previousFrame = endFrame;
-      const item: {
-        durationInFrames: number;
-        audio: string;
-        media?: string;
-        mediaType?: string;
-      } = { durationInFrames, audio: audioName };
+      const item: RemotionMotionScene = { durationInFrames, audio: audioName, motion: scene.motion ?? null };
       if (hasMedia) {
         const name = `media-${index}${extname(scene.storageKey!) || '.asset'}`;
         await pipeline(
@@ -287,7 +282,7 @@ export class FfmpegVideoRenderer implements VideoRenderer {
     await writeFile(propsPath, JSON.stringify(props));
     await writeFile(
       entry,
-      `import React from'react';import{AbsoluteFill,Audio,Img,OffthreadVideo,Sequence,staticFile,Composition,registerRoot}from'remotion';const Video=({scenes})=>{let from=0;return <AbsoluteFill style={{backgroundColor:'black'}}>{scenes.map((s,i)=>{const start=from;from+=s.durationInFrames;return <Sequence key={i} from={start} durationInFrames={s.durationInFrames}><AbsoluteFill>{s.media?(s.mediaType==='video'?<OffthreadVideo src={staticFile(s.media)} muted style={{width:'100%',height:'100%',objectFit:'contain'}}/>:<Img src={staticFile(s.media)} style={{width:'100%',height:'100%',objectFit:'contain'}}/>):null}<Audio src={staticFile(s.audio)}/></AbsoluteFill></Sequence>})}</AbsoluteFill>};const Root=()=> <Composition id="ContentOSVideo" component={Video} width={1080} height={1920} fps={30} durationInFrames={30} defaultProps={{scenes:[]}} calculateMetadata={({props})=>({durationInFrames:props.scenes.reduce((n,s)=>n+s.durationInFrames,0)})}/>;registerRoot(Root);`,
+      remotionMotionEntrySource(),
     );
     const intermediate = join(dir, 'remotion.mp4');
     const remotionPath = process.env.REMOTION_PATH;

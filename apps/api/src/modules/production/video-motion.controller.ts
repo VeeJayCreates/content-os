@@ -1,0 +1,2 @@
+import { Controller,Get,Param,ParseUUIDPipe,Post } from '@nestjs/common';import { VideoMotionService } from './video-motion.service';
+@Controller('content-scripts')export class VideoMotionController{constructor(private readonly service:VideoMotionService){}@Post(':id/video-motion-plan')prepare(@Param('id',new ParseUUIDPipe())id:string){return this.service.prepare(id);}@Get(':id/video-motion-plan')find(@Param('id',new ParseUUIDPipe())id:string){return this.service.find(id);}}
