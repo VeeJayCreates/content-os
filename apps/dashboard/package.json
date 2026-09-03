@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "check-types": "tsc -p tsconfig.json --noEmit",
-    "test": "node --require ./test-node-preload.cjs ./node_modules/tsx/dist/cli.mjs --test features/research/components/*.test.ts features/agent-runtime/components/*.test.ts features/agent-runtime/components/*.test.tsx",
+    "test": "node --require ./test-node-preload.cjs ./node_modules/tsx/dist/cli.mjs --test features/research/components/*.test.ts features/agent-runtime/components/*.test.ts features/agent-runtime/components/*.test.tsx features/projects/components/*.test.ts",
     "start": "next start",
     "lint": "eslint"
   },

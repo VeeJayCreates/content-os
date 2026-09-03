@@ -28,4 +28,15 @@ describe('SarvamBulbulConfiguration', () => {
     delete process.env.SARVAM_API_KEYS;
     expect(new SarvamBulbulConfiguration().resolve().keys.size).toBe(0);
   });
+  it('uses the ignored local audio root when no output directory is configured', () => {
+    delete process.env.AUDIO_SARVAM_OUTPUT_DIR;
+    expect(new SarvamBulbulConfiguration().resolve().outputDirectory).toMatch(/\.content-os-audio$/);
+  });
+
+  it('allows the explicitly mapped English locale for production audio', () => {
+    const configuration = new SarvamBulbulConfiguration().resolve();
+    expect(configuration.languageModes.English).toBe('en-IN');
+    expect(configuration.languageSupport.production).toContain('English');
+    expect(configuration.languageSupport.previewOnly).not.toContain('English');
+  });
 });

@@ -23,6 +23,8 @@ import {
 } from './opportunity-metrics-v2';
 import { extractTopicCandidates } from './topic-candidate-extraction';
 import { SemanticTopicClusteringService } from './semantic-topic-clustering.service';
+import { ResearchExecutionLogger } from './research-execution-logger.service';
+import { Optional } from '@nestjs/common';
 
 type DetectionCandidate = Pick<
   OpportunityWithProject,
@@ -37,13 +39,17 @@ export class OpportunityDetectionService {
     private readonly metrics: OpportunityMetricRepository,
     private readonly candidates: TopicCandidateRepository,
     private readonly clustering: SemanticTopicClusteringService,
+    @Optional() private readonly executionLog?: ResearchExecutionLogger,
   ) {}
 
   async detect(
     projectId?: string,
     calculationTime = new Date(),
   ): Promise<OpportunityDetectionResult> {
+    const started = Date.now();
+    this.executionLog?.event('info', 'opportunity_detection.signal_lookup.started', 'started', { result: { projectId: projectId ?? null } });
     const records = await this.signals.findAll(projectId);
+    this.executionLog?.event('info', 'opportunity_detection.signal_lookup.completed', 'completed', { result: { signalCount: records.length } });
     const signals = records.map((signal): DetectionSignal => ({
         id: signal.id,
         projectId: signal.projectId,
@@ -60,11 +66,30 @@ export class OpportunityDetectionService {
       for (const extracted of extractTopicCandidates(signal.title)) {
         const stored = await this.candidates.upsert({ projectId: signal.projectId, signalId: signal.id, ...extracted });
         persistedCandidates.push(stored);
+        this.executionLog?.withContext({ signalId: signal.id, topicCandidateId: stored.id }, () => this.executionLog?.event('debug', 'topic_candidate.persistence.completed', 'completed', { result: { normalizedText: stored.normalizedText } }));
       }
+    }
+    // A repeated manual detection must not recluster the complete historical
+    // corpus when every deterministic candidate is already represented by an
+    // opportunity. New candidates still take the existing full clustering path
+    // so they can merge with historical candidates without changing identity.
+    const projectIds = [...new Set(persistedCandidates.map((candidate) => candidate.projectId))];
+    const existingByProject = new Map<string, DetectionCandidate[]>();
+    for (const candidateProjectId of projectIds) existingByProject.set(candidateProjectId, await this.opportunities.findAll(candidateProjectId));
+    const existingOpportunityIds = [...existingByProject.values()].flat().map((opportunity) => opportunity.id);
+    const attachedByOpportunity = await this.candidates.findByOpportunityIds(existingOpportunityIds);
+    const attachedCandidateIds = new Set([...attachedByOpportunity.values()].flat().map((candidate) => candidate.id));
+    const candidatesRequiringClustering = persistedCandidates.filter((candidate) => !attachedCandidateIds.has(candidate.id));
+    this.executionLog?.event('info', 'semantic_clustering.incremental_plan', 'completed', { result: { candidateCount: persistedCandidates.length, reusedCandidateCount: persistedCandidates.length - candidatesRequiringClustering.length, candidatesRequiringClustering: candidatesRequiringClustering.length, existingOpportunityCount: existingOpportunityIds.length } });
+    if (persistedCandidates.length > 0 && candidatesRequiringClustering.length === 0) {
+      const result: OpportunityDetectionResult = { signalsProcessed: records.length, opportunitiesCreated: 0, opportunitiesUpdated: 0, linksCreated: 0, warnings: [] };
+      this.executionLog?.event('info', 'opportunity_detection.completed', 'reused', { durationMs: Date.now() - started, result });
+      return result;
     }
     // All provider work completes before Topic/cluster persistence. A local model
     // failure may leave reusable candidate rows, but never partial reconciliation.
     const clusters = await this.clustering.cluster(persistedCandidates);
+    this.executionLog?.event('info', 'topic_clustering.completed', 'completed', { result: { candidateCount: persistedCandidates.length, clusterCount: clusters.length } });
 
     const result: OpportunityDetectionResult = {
       signalsProcessed: records.length,
@@ -73,7 +98,7 @@ export class OpportunityDetectionService {
       linksCreated: 0,
       warnings: [],
     };
-    const candidatesByProject = new Map<string, DetectionCandidate[]>();
+    const candidatesByProject = new Map<string, DetectionCandidate[]>(existingByProject);
     const creates: NewOpportunity[] = [];
     const updates: Array<{
       id: string;
@@ -102,6 +127,7 @@ export class OpportunityDetectionService {
       if (opportunity) {
         updates.push({ id: opportunity.id, data });
         result.opportunitiesUpdated += 1;
+        this.executionLog?.withContext({ opportunityId: opportunity.id, clusterKey: key }, () => this.executionLog?.event('debug', 'opportunity.persistence.completed', 'reused', { result: { signalCount: data.signalCount, sourceCount: data.sourceCount } }));
       } else {
         const now = new Date().toISOString();
         const created: NewOpportunity = {
@@ -117,6 +143,7 @@ export class OpportunityDetectionService {
         opportunity = created;
         candidates.push(created);
         result.opportunitiesCreated += 1;
+        this.executionLog?.withContext({ opportunityId: opportunity.id, clusterKey: key }, () => this.executionLog?.event('info', 'opportunity.persistence.completed', 'created', { result: { signalCount: data.signalCount, sourceCount: data.sourceCount, score: data.score } }));
       }
 
       for (const candidate of clusterCandidates) candidateMemberships.push({ opportunityId: opportunity.id, candidateId: candidate.id });
@@ -126,6 +153,7 @@ export class OpportunityDetectionService {
     await this.opportunities.persistDetectionBatch(creates, updates, []);
     for (const membership of candidateMemberships) if (await this.candidates.attachToOpportunity(membership.opportunityId, membership.candidateId)) result.linksCreated += 1;
     await this.recalculateCandidateAggregatesAndMetrics([...affectedOpportunityIds], signalById, calculationTime);
+    this.executionLog?.event('info', 'opportunity_detection.completed', 'completed', { durationMs: Date.now() - started, result });
     return result;
   }
 
@@ -177,6 +205,9 @@ export class OpportunityDetectionService {
       );
       if (currentMetrics.get(opportunityId)?.inputHash !== metric.inputHash) {
         metricUpserts.push({ opportunityId, ...metric });
+        this.executionLog?.withContext({ opportunityId }, () => this.executionLog?.event('debug', 'opportunity_metrics.calculated', 'completed', { result: { metric } }));
+      } else {
+        this.executionLog?.withContext({ opportunityId }, () => this.executionLog?.event('debug', 'opportunity_metrics.skipped', 'reused', { result: { reasonCode: 'unchanged_input_hash' } }));
       }
     }
 

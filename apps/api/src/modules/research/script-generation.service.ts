@@ -13,6 +13,7 @@ import {
   type ContentScript,
   type ProjectContentStyleProfile,
   type ProjectContentStyleProfileUpdateInput,
+  type GeographicEntity,
 } from '@content-os/contracts';
 import {
   ContentScriptRepository,
@@ -57,7 +58,8 @@ type ContentPackageInput = {
   targetDurationSeconds: number;
   targetWordCount: number;
   contentAngle: { angleType: string; videoIdeaTitle: string; videoIdeaSummary: string | null; hook: string | null; whyNow: string | null };
-  facts: { id: string; claim: string; status: string }[];
+  facts: { id: string; claim: string; status: string; geographicEntities: GeographicEntity[] }[];
+  geographicEntities: GeographicEntity[];
   signals: string[];
   style: ReturnType<typeof normalizeContentStyleProfile>;
 };
@@ -140,7 +142,7 @@ export class ScriptGenerationService {
       language: prepared.input.language,
       targetDurationSeconds: prepared.input.targetDurationSeconds,
       targetWordCount: prepared.input.targetWordCount,
-      ...output,
+      ...output, geographicEntities: prepared.input.geographicEntities.filter((entity) => entity.sourceFactIds.some((factId) => output.citedFactIds.includes(factId))),
       status: ScriptStatus.READY,
       provider: route.provider,
       model: route.model,
@@ -176,9 +178,10 @@ export class ScriptGenerationService {
 
   private async input(researchPackageId: string, assessment: ContentPackageInput['contentAngle'], format: ScriptFormat, language: ScriptLanguage, targetDurationSeconds: number, style: ContentPackageInput['style']): Promise<ContentPackageInput> {
     const rows = (await this.packages.findFactsWithEvidenceByPackageIds([researchPackageId])).get(researchPackageId) ?? [];
-    const facts = [...new Map(rows.map((row) => [row.id, { id: row.id, claim: row.claim, status: row.status }])).values()];
+    const facts = [...new Map(rows.map((row) => [row.id, { id: row.id, claim: row.claim, status: row.status, geographicEntities: Array.isArray(row.geographicEntities) ? row.geographicEntities as GeographicEntity[] : [] }])).values()];
     if (!facts.length) throw new ConflictException('Candidate-safe Research Package facts are required');
-    return { language, format, targetDurationSeconds, targetWordCount: wordCountFor(targetDurationSeconds), contentAngle: assessment, facts, signals: [...new Set(rows.map((row) => row.signalId).filter((id): id is string => Boolean(id)))], style };
+    const geographicEntities = [...new Map(facts.flatMap((fact) => fact.geographicEntities).filter((entity) => entity && typeof entity.id === 'string' && entity.sourceFactIds.includes(facts.find((fact) => fact.geographicEntities.some((candidate) => candidate.id === entity.id))?.id ?? '')).map((entity) => [entity.id, entity])).values()].sort((a, b) => a.id.localeCompare(b.id));
+    return { language, format, targetDurationSeconds, targetWordCount: wordCountFor(targetDurationSeconds), contentAngle: assessment, facts, geographicEntities, signals: [...new Set(rows.map((row) => row.signalId).filter((id): id is string => Boolean(id)))], style };
   }
 
   private validate(value: unknown, facts: Set<string>, format: ScriptFormat) {

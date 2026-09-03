@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   bindVideoCompositionAssets,
+  executeVideoRenderLocally,
   enqueueVideoRender,
   getVideoRenderStatus,
   prepareVideoComposition,
   prepareVideoRenderInput,
+  prepareVideoMotionPlan,
   retryVideoRender,
   videoRenderOutputUrl,
 } from "../api/client.ts";
@@ -22,8 +24,10 @@ test("render client encodes identifiers and uses the existing paths and methods"
     const id = "script/one two";
     await prepareVideoComposition(id);
     await bindVideoCompositionAssets(id);
+    await prepareVideoMotionPlan(id);
     await prepareVideoRenderInput(id);
     await enqueueVideoRender(id);
+    await executeVideoRenderLocally(id);
     await retryVideoRender(id);
     await getVideoRenderStatus(id);
 
@@ -31,8 +35,10 @@ test("render client encodes identifiers and uses the existing paths and methods"
     assert.deepEqual(calls, [
       { url: `${base}/video-composition-plan`, method: "POST" },
       { url: `${base}/video-composition-plan/assets`, method: "POST" },
+      { url: `${base}/video-motion-plan`, method: "POST" },
       { url: `${base}/video-render-input-manifest`, method: "POST" },
       { url: `${base}/video-render-jobs`, method: "POST" },
+      { url: `${base}/video-render-jobs/execute-local`, method: "POST" },
       { url: `${base}/video-render-jobs/retry`, method: "POST" },
       { url: `${base}/video-render-job`, method: "GET" },
     ]);

@@ -6,10 +6,32 @@ jest.mock('@content-os/contracts', () => ({
   ScenePlanStatus: { READY: 'ready' },
   VisualAssetCandidateStatus: { DISCOVERED: 'discovered', REJECTED: 'rejected' },
   VisualAssetManifestStatus: { READY: 'ready', NEEDS_REVIEW: 'needs_review', STALE: 'stale' },
-  SceneMediaStrategy: {},
+  SceneMediaStrategy: { STOCK_OR_SOURCE_FOOTAGE: 'stock_or_source_footage', TEXT_ONLY: 'text_only', REUSABLE_MAP_ANIMATION: 'reusable_map_animation' }, validateInternalVisualSpecification: (value:any) => value,
 }));
 
-import { VisualAssetRuntimeService } from './visual-asset-runtime.service';
+import { createInternalVisualSpecification, VisualAssetRuntimeService } from './visual-asset-runtime.service';
+
+describe('Internal visual specification generation', () => {
+  const mapScene = {
+    primarySearchQuery: 'Named route overview',
+    visualDescription: 'Zoomed-in map of a narrow chokepoint with a pressure pulse.',
+    onScreenText: 'Operational pressure',
+    explicitLocations: ['Named Region', 'Named Region'],
+  };
+
+  it('compiles explicit scene intent into deterministic bounded map primitives without coordinates', () => {
+    const first: any = createInternalVisualSpecification('reusable_map_animation', mapScene);
+    const second: any = createInternalVisualSpecification('reusable_map_animation', mapScene);
+    expect(first).toEqual(second);
+    expect(first).toMatchObject({ type: 'map', spec: { viewport: { framing: 'close', geometryStatus: 'unavailable' }, highlightedRegions: ['Named Region'], regionDetails: [{ label: 'Named Region', geometryStatus: 'named_region' }], markers: [], routes: [], zones: [{ kind: 'chokepoint' }, { kind: 'pressure' }], labels: ['Operational pressure'] } });
+  });
+
+  it('compiles flow and pressure concepts into executable primitives without descriptive prose or coordinates', () => {
+    const visual: any = createInternalVisualSpecification('programmatic_animation', { primarySearchQuery: 'Corridor traffic', visualDescription: 'Traffic flowing through a narrow corridor slows as a pressure wave approaches.', onScreenText: 'Pressure rises' });
+    expect(visual).toMatchObject({ type: 'flow_or_corridor', spec: { direction: 'forward', lanes: [], laneConfiguration: [{ role: 'primary', geometryStatus: 'unavailable' }], movingEntities: ['generic'], entityConfiguration: [{ kind: 'generic', count: 3 }], compression: 'pressure', progression: 'approach', pressureZoneDetails: { kind: 'chokepoint' }, labels: ['Pressure rises'] } });
+    expect(JSON.stringify(visual)).not.toContain('Traffic flowing');
+  });
+});
 
 const candidate = (overrides = {}) => ({
   id: 'candidate-a', provider: 'provider-a', providerAssetId: 'asset-a', sourceUrl: 'https://example.test/a', mediaType: 'image',
@@ -50,6 +72,33 @@ describe('VisualAssetRuntimeService candidate lifecycle', () => {
     );
     await expect(runtime.prepare('script-a')).resolves.toEqual(preparedManifest);
     expect(prepareRepository.upsert).toHaveBeenCalledWith(expect.objectContaining({ status: 'needs_review', completedAt: null }), expect.any(Array));
+  });
+
+  it('treats a deterministic text-card specification as internal rather than ambiguous external acquisition', async () => {
+    const prepareRepository = { findByContentScriptId: jest.fn().mockResolvedValue(undefined), upsert: jest.fn(async (data, requirements) => ({ id: 'manifest-a', ...data, requirements })) };
+    const runtime = new VisualAssetRuntimeService(
+      { findById: jest.fn().mockResolvedValue({ id: 'script-a', projectId: 'project-a', status: 'ready', inputHash: 'script-input', fullScript: 'Narration.' }) } as never,
+      { findByContentScriptId: jest.fn().mockResolvedValue({ id: 'plan-a', projectId: 'project-a', status: 'ready', inputHash: 'plan-input', scenes: [{ id: 'scene-a', narration: 'Narration.', visualDescription: 'This card explains the next point.', mediaStrategy: 'text_only', primarySearchQuery: null, alternateSearchQueries: [], citedFactIds: [], estimatedDurationMs: 1000, onScreenText: 'Next point' }] }) } as never,
+      { findByContentScriptId: jest.fn().mockResolvedValue(undefined) } as never,
+      prepareRepository as never,
+    );
+    const result: any = await runtime.prepare('script-a');
+    expect(result.status).toBe('ready');
+    expect(result.requirements[0]).toMatchObject({ acquisitionStrategy: 'none_required', manualReviewRequired: false, reviewReasons: [], textCardSpecification: { headline: 'Next point' } });
+  });
+
+  it('passes only selected authoritative entities to exact geographic resolution for map requirements', async () => {
+    const entity = { id: 'entity-1', canonicalName: 'Reviewed Strait', aliases: [], entityType: 'strait', sourceFactIds: ['fact-1'], sourceSignalIds: ['signal-1'] };
+    const resolver = { resolve: jest.fn().mockResolvedValue([{ id: 'reference-1', canonicalName: entity.canonicalName, point: null, bounds: null, geometryReference: 'reviewed', entityType: 'strait', geometryStatus: 'verified_geometry_reference', provenance: { sourceId: 'source', reference: 'record', version: 'v1', revision: 1 } }]) };
+    const repository = { findByContentScriptId: jest.fn().mockResolvedValue(undefined), upsert: jest.fn(async (data, requirements) => ({ ...data, requirements })) };
+    const runtime = new VisualAssetRuntimeService(
+      { findById: jest.fn().mockResolvedValue({ id: 'script-a', projectId: 'project-a', status: 'ready', inputHash: 'script-input', fullScript: 'Narration.', geographicEntities: [entity] }) } as never,
+      { findByContentScriptId: jest.fn().mockResolvedValue({ id: 'plan-a', projectId: 'project-a', status: 'ready', inputHash: 'plan-input', scenes: [{ id: 'scene-a', narration: 'Narration.', visualDescription: 'Map visual.', mediaStrategy: 'reusable_map_animation', alternateSearchQueries: [], citedFactIds: ['fact-1'], geographicEntityIds: [entity.id], estimatedDurationMs: 1000 }] }) } as never,
+      { findByContentScriptId: jest.fn().mockResolvedValue(undefined) } as never, repository as never, resolver as never,
+    );
+    const result: any = await runtime.prepare('script-a');
+    expect(resolver.resolve).toHaveBeenCalledWith([entity.canonicalName]);
+    expect(result.requirements[0]).toMatchObject({ explicitLocations: [entity.canonicalName], geographicReferenceIds: ['reference-1'] });
   });
 
   it('uses one requirement-scoped repository identity for repeated candidate upserts', async () => {

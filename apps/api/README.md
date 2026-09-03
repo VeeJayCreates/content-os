@@ -57,6 +57,25 @@ $ pnpm run test:e2e
 $ pnpm run test:cov
 ```
 
+## Research scheduler V1
+
+The Research scheduler is disabled by default and never processes work during
+application startup. When enabled, it reuses the existing competitor YouTube
+ingestion/orchestration flow and durable transcript queue.
+
+- `RESEARCH_SCHEDULER_ENABLED=true` enables timer registration (default: `false`).
+- Discovery runs at fixed `00:00`, `06:00`, `12:00`, and `18:00` wall-clock
+  time in `Asia/Kolkata`, independent of API startup time or host timezone.
+- `RESEARCH_TRANSCRIPT_INTERVAL_MINUTES` controls transcript cadence (default: `10`).
+- `RESEARCH_TRANSCRIPTS_PER_RUN=1` is fixed to one eligible queue job per run in V1.
+- `RESEARCH_SCHEDULER_MANUAL_ENABLED` enables explicit scheduler endpoints
+  (default: enabled outside production, disabled in production).
+
+When manual runs are enabled, the same methods used by scheduled timers can be
+called with `POST /api/research/scheduler/discovery/run` and
+`POST /api/research/scheduler/transcript/run`. The transcript endpoint claims
+at most one due durable job and preserves queue retry/backoff semantics.
+
 ## Deployment
 
 When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.

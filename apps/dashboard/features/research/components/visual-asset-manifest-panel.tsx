@@ -31,6 +31,19 @@ const readable = (value: string) =>
   value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 const duration = (milliseconds: number) =>
   `${Math.max(1, Math.round(milliseconds / 1000))} sec`;
+export const candidateEntryAllowed = (acquisitionStrategy: string) =>
+  ["provider_search", "source_reference", "manual"].includes(
+    acquisitionStrategy,
+  );
+export const internallyResolvedRequirement = (requirement: {
+  acquisitionStrategy: string;
+  manualReviewRequired: boolean;
+}) =>
+  [
+    "none_required",
+    "reusable_template",
+    "programmatic_specification",
+  ].includes(requirement.acquisitionStrategy) && !requirement.manualReviewRequired;
 const emptyCandidate = (): VisualAssetCandidateInput => ({
   provider: "",
   providerAssetId: "",
@@ -133,8 +146,13 @@ export function VisualAssetManifestPanel({
   const mounted = React.useRef(true);
   const requests = React.useRef<Record<string, number>>({});
   React.useEffect(
-    () => () => {
-      mounted.current = false;
+    () => {
+      // React Strict Mode re-runs effects in development. Restore ownership for
+      // the second effect pass so a completed status request can clear Loading.
+      mounted.current = true;
+      return () => {
+        mounted.current = false;
+      };
     },
     [],
   );
@@ -193,7 +211,10 @@ export function VisualAssetManifestPanel({
     }
   }, [contentScriptId]);
   React.useEffect(() => {
-    void loadAcquisition();
+    const timer = window.setTimeout(() => {
+      void loadAcquisition();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [loadAcquisition]);
   const mutate = async (key: string, operation: () => Promise<unknown>) => {
     if (actionRef.current) return;
@@ -218,7 +239,7 @@ export function VisualAssetManifestPanel({
   const resolved = manifest.requirements.filter(
     (requirement) =>
       requirement.selectedCandidateId ||
-      requirement.acquisitionStrategy === "none_required",
+      internallyResolvedRequirement(requirement),
   ).length;
   const allowed = acquisitionActions(
     manifest.status,
@@ -332,6 +353,9 @@ export function VisualAssetManifestPanel({
             const value = forms[requirement.id] ?? emptyCandidate();
             const list = candidates[requirement.id] ?? [];
             const validation = fieldError(value);
+            const acceptsCandidateEntry = candidateEntryAllowed(
+              requirement.acquisitionStrategy,
+            );
             return (
               <article
                 key={requirement.id}
@@ -392,6 +416,8 @@ export function VisualAssetManifestPanel({
                     {requirement.reviewReasons.join(", ") || "Required"}
                   </p>
                 ) : null}
+                {acceptsCandidateEntry ? (
+                  <>
                 <div className="grid gap-2 rounded bg-muted/30 p-2 sm:grid-cols-2">
                   <label>
                     Provider
@@ -704,6 +730,17 @@ export function VisualAssetManifestPanel({
                     ? "Saving…"
                     : "Add candidate"}
                 </Button>
+                  </>
+                ) : (
+                  <p className="text-muted-foreground">
+                    {requirement.acquisitionStrategy === "reusable_template"
+                      ? "This reusable map specification does not accept an external media candidate."
+                      : requirement.acquisitionStrategy ===
+                          "programmatic_specification"
+                        ? "This programmatic specification does not accept an external media candidate."
+                        : "This requirement does not accept an external media candidate."}
+                  </p>
+                )}
                 <div className="space-y-2">
                   {list.map((candidate) => (
                     <div key={candidate.id} className="rounded border p-2">

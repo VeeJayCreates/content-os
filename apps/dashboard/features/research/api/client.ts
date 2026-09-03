@@ -6,6 +6,7 @@ import type {
   BulkCreateResearchSourcesResult,
   IngestionResult,
   Opportunity,
+  OpportunityDetail,
   OpportunityDetectionResult,
   OpportunityStatus,
   ResearchPackageDetail,
@@ -16,6 +17,7 @@ import type {
   ProjectSelectionPolicy,
   EditorialAssessment,
   Signal,
+  SignalTranscript,
   ProductionQueueItem,
   FillProductionQueueResult,
   ContentScript,
@@ -29,6 +31,8 @@ import type {
   VideoRenderInputManifest,
   VideoRenderJob,
   UpdateResearchSourceInput,
+  ResearchAutomationRun,
+  ResearchReviewQueueItem,
 } from "@content-os/contracts";
 
 const apiEndpoint = "/api";
@@ -340,6 +344,31 @@ export function prepareVisualAssetManifest(contentScriptId: string) {
 export function getVisualAssetManifest(contentScriptId: string) {
   return requestUrl<VisualAssetManifest>(visualAssetPath(contentScriptId));
 }
+
+export function getOpportunity(id: string) {
+  return requestUrl<OpportunityDetail>(
+    `${apiEndpoint}/opportunities/${encodeURIComponent(id)}`,
+  );
+}
+
+/** Full caption text is intentionally fetched only after the reviewer asks for it. */
+export function getSignalTranscript(signalId: string) {
+  return requestUrl<SignalTranscript>(
+    `${apiEndpoint}/signals/${encodeURIComponent(signalId)}/transcript`,
+  );
+}
+export function expandResearch(opportunityId: string) {
+  return requestUrl(`${apiEndpoint}/opportunities/${encodeURIComponent(opportunityId)}/expand-research`, { method: "POST" });
+}
+export function runResearchAutomation(projectId: string) {
+  return requestUrl<ResearchAutomationRun>(`${apiEndpoint}/projects/${encodeURIComponent(projectId)}/research-automation/run`, { method: "POST" });
+}
+export function getResearchReviewQueue(projectId: string) {
+  return requestUrl<ResearchReviewQueueItem[]>(`${apiEndpoint}/projects/${encodeURIComponent(projectId)}/research-automation/review-queue`);
+}
+export function reviewResearchPackage(id: string, decision: "approved" | "rejected") {
+  return requestUrl(`${apiEndpoint}/research-packages/${encodeURIComponent(id)}/review`, { method: "PATCH", body: JSON.stringify({ decision }) });
+}
 const visualAssetAcquisitionPath = (contentScriptId: string) =>
   `${visualAssetPath(contentScriptId)}/visual-asset-acquisitions`;
 export function prepareVisualAssetAcquisition(contentScriptId: string) {
@@ -441,9 +470,24 @@ export function prepareVideoRenderInput(contentScriptId: string) {
   );
 }
 
+export function prepareVideoMotionPlan(contentScriptId: string) {
+  return requestUrl(`${videoProductionPath(contentScriptId)}/video-motion-plan`, { method: "POST" });
+}
+
+export function getVideoMotionPlan(contentScriptId: string) {
+  return requestUrl(`${videoProductionPath(contentScriptId)}/video-motion-plan`);
+}
+
 export function enqueueVideoRender(contentScriptId: string) {
   return requestUrl<VideoRenderJob>(
     `${videoProductionPath(contentScriptId)}/video-render-jobs`,
+    { method: "POST" },
+  );
+}
+
+export function executeVideoRenderLocally(contentScriptId: string) {
+  return requestUrl<VideoRenderJob>(
+    `${videoProductionPath(contentScriptId)}/video-render-jobs/execute-local`,
     { method: "POST" },
   );
 }

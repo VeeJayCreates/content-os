@@ -38,7 +38,7 @@ const YOUTUBE_HOSTS = new Set(['www.youtube.com', 'youtube.com']);
 export function normalizeTitle(value: string): string {
   return value
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/[^\p{L}\p{M}\p{N}\s]/gu, ' ')
     .split(/\s+/)
     .filter((word) => word && !STOP_WORDS.has(word))
     .join(' ');

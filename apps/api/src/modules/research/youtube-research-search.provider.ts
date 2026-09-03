@@ -3,9 +3,11 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import type {
+  ExternalResearchSearchFailureCategory,
   ExternalResearchSearchProvider,
   ExternalResearchSearchResult,
 } from './external-research-discovery.types';
+import { ExternalResearchSearchError } from './external-research-discovery.types';
 
 const execFileAsync = promisify(execFile);
 
@@ -28,20 +30,25 @@ export class YouTubeResearchSearchProvider
   }): Promise<ExternalResearchSearchResult[]> {
     const maxResults = Math.max(1, Math.min(input.maxResults, 10));
 
-    const { stdout } = await execFileAsync(
-      'yt-dlp',
-      [
-        `ytsearch${maxResults}:${input.query}`,
-        '--flat-playlist',
-        '--dump-json',
-        '--no-warnings',
-      ],
-      {
-        windowsHide: true,
-        timeout: 20_000,
-        maxBuffer: 2 * 1024 * 1024,
-      },
-    );
+    let stdout: string;
+    try {
+      ({ stdout } = await execFileAsync(
+        'yt-dlp',
+        [
+          `ytsearch${maxResults}:${input.query}`,
+          '--flat-playlist',
+          '--dump-json',
+          '--no-warnings',
+        ],
+        {
+          windowsHide: true,
+          timeout: 20_000,
+          maxBuffer: 2 * 1024 * 1024,
+        },
+      ));
+    } catch (error) {
+      throw new ExternalResearchSearchError(classifyYouTubeSearchFailure(error));
+    }
 
     const results: ExternalResearchSearchResult[] = [];
     const seenVideos = new Set<string>();
@@ -93,4 +100,20 @@ export class YouTubeResearchSearchProvider
 
     return results.slice(0, maxResults);
   }
+}
+
+export function classifyYouTubeSearchFailure(
+  error: unknown,
+): ExternalResearchSearchFailureCategory {
+  const code = typeof error === 'object' && error && 'code' in error
+    ? String((error as { code?: unknown }).code ?? '')
+    : '';
+  const message = error instanceof Error ? error.message : '';
+  const fingerprint = `${code} ${message}`.toLowerCase();
+  if (/winerror\s*10013|\beacces\b|access permissions/.test(fingerprint)) {
+    return 'local_network_permission_denied';
+  }
+  if (code === 'ENOENT') return 'executable_unavailable';
+  if (/etimedout|\btimeout\b|\babort/.test(fingerprint)) return 'timeout';
+  return 'transport_unavailable';
 }

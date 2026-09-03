@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { AiTask } from '@content-os/contracts';
 import { SemanticEmbeddingCacheRepository } from '@content-os/storage';
 import { createHash } from 'node:crypto';
 
 import { AiRuntime } from '../ai/ai-runtime.service';
-import { DEFAULT_SEMANTIC_EMBEDDING_BATCH_SIZE, formClusters, hasSemanticConflict, retrieveNeighbors, RERANK_ADMISSION_SCORE, RERANK_REQUEST_BUDGET, selectRepresentative, type CandidateCluster, type SemanticCandidate, type SemanticExecutionMetrics } from './semantic-topic-clustering';
+import { ResearchExecutionLogger } from './research-execution-logger.service';
+import { DEFAULT_SEMANTIC_EMBEDDING_BATCH_SIZE, INCREMENTAL_RETRIEVAL_MIN_SIMILARITY, INCREMENTAL_RERANK_ADMISSION_SCORE, cosine, RETRIEVAL_TOP_K, formClusters, hasSemanticConflict, retrieveNeighbors, RERANK_ADMISSION_SCORE, RERANK_REQUEST_BUDGET, selectRepresentative, type CandidateCluster, type SemanticCandidate, type SemanticExecutionMetrics } from './semantic-topic-clustering';
 
 const RERANK_CONCURRENCY = 2;
 
@@ -27,7 +28,7 @@ export type SemanticPlanOptions = {
 export class SemanticTopicClusteringService {
   private metrics: SemanticExecutionMetrics | null = null;
 
-  constructor(private readonly runtime: AiRuntime, private readonly embeddingCache?: SemanticEmbeddingCacheRepository) {}
+  constructor(private readonly runtime: AiRuntime, private readonly embeddingCache?: SemanticEmbeddingCacheRepository, @Optional() private readonly executionLog?: ResearchExecutionLogger) {}
 
   lastExecutionMetrics(): SemanticExecutionMetrics | null { return this.metrics ? { ...this.metrics } : null; }
 
@@ -35,18 +36,21 @@ export class SemanticTopicClusteringService {
   async plan(candidates: Array<Omit<SemanticCandidate, 'embedding'>>, options: SemanticPlanOptions = {}): Promise<SemanticExecutionMetrics> {
     const started = Date.now();
     const metrics = initialMetrics(candidates.length);
+    this.executionLog?.event('debug', 'semantic_clustering.plan.started', 'started', { result: { candidateCount: candidates.length } });
     try {
       await this.planProjects(candidates, metrics, options);
     } finally {
       metrics.totalDurationMs = Date.now() - started;
       this.metrics = metrics;
     }
+    this.executionLog?.event('info', 'semantic_clustering.plan.completed', 'completed', { result: metrics });
     return { ...metrics };
   }
 
   async cluster(candidates: Array<Omit<SemanticCandidate, 'embedding'>>): Promise<CandidateCluster[]> {
     const started = Date.now();
     const metrics = initialMetrics(candidates.length);
+    this.executionLog?.event('debug', 'semantic_clustering.cluster.started', 'started', { result: { candidateCount: candidates.length } });
     try {
       const plans = await this.planProjects(candidates, metrics);
       const scheduled = plans.flatMap((plan) => plan.requests).slice(0, RERANK_REQUEST_BUDGET);
@@ -58,11 +62,142 @@ export class SemanticTopicClusteringService {
       const acceptedByProject = await this.confirm(scheduled, plans, metrics);
       const clusters: CandidateCluster[] = [];
       for (const plan of plans) clusters.push(...formClusters(plan.embedded, acceptedByProject.get(plan.embedded[0]?.projectId ?? '') ?? []));
+      this.executionLog?.event('info', 'semantic_clustering.cluster.completed', 'completed', { result: { clusterCount: clusters.length, metrics } });
       return clusters;
     } finally {
       metrics.totalDurationMs = Date.now() - started;
       this.metrics = metrics;
     }
+  }
+
+  async retrieveBestCandidates(
+    incoming: Omit<SemanticCandidate, 'embedding'>,
+    existing: Array<Omit<SemanticCandidate, 'embedding'>>,
+    limit = 5,
+  ): Promise<Array<{ candidateId: string; similarity: number }>> {
+    if (existing.length === 0) return [];
+
+    const candidates = [incoming, ...existing];
+    const metrics = initialMetrics(candidates.length);
+
+    const plans = await this.planProjects(candidates, metrics);
+    const plan = plans.find((entry) =>
+      entry.embedded.some((candidate) => candidate.id === incoming.id),
+    );
+
+    if (!plan) return [];
+
+    const embeddedIncoming = plan.embedded.find(
+      (candidate) => candidate.id === incoming.id,
+    );
+
+    if (!embeddedIncoming) return [];
+
+    return plan.embedded
+      .filter((candidate) => candidate.id !== incoming.id)
+      .map((candidate) => ({
+        candidateId: candidate.id,
+        similarity: cosine(
+          embeddedIncoming.embedding,
+          candidate.embedding,
+        ),
+      }))
+      .filter(({ candidateId }) => {
+        const candidate = plan.embedded.find(
+          (item) => item.id === candidateId,
+        );
+
+        return candidate
+          ? !hasSemanticConflict(embeddedIncoming, candidate)
+          : false;
+      })
+      .sort(
+        (left, right) =>
+          right.similarity - left.similarity
+          || left.candidateId.localeCompare(right.candidateId),
+      )
+      .slice(0, limit);
+  }
+
+  async findBestMatch(
+    incoming: Omit<SemanticCandidate, 'embedding'>,
+    existing: Array<Omit<SemanticCandidate, 'embedding'>>,
+  ): Promise<{ candidateId: string; similarity: number; rerankScore: number } | undefined> {
+    if (existing.length === 0) return undefined;
+
+    const candidates = [incoming, ...existing];
+    const metrics = initialMetrics(candidates.length);
+
+    const plans = await this.planProjects(candidates, metrics);
+    const plan = plans.find((entry) =>
+      entry.embedded.some((candidate) => candidate.id === incoming.id),
+    );
+
+    if (!plan) return undefined;
+
+    const embeddedIncoming = plan.embedded.find(
+      (candidate) => candidate.id === incoming.id,
+    );
+
+    if (!embeddedIncoming) return undefined;
+
+    const candidateMatches = plan.embedded
+      .filter((candidate) => candidate.id !== incoming.id)
+      .map((candidate) => ({
+        candidate,
+        similarity: cosine(embeddedIncoming.embedding, candidate.embedding),
+      }))
+      .filter(
+        ({ candidate, similarity }) =>
+          similarity >= INCREMENTAL_RETRIEVAL_MIN_SIMILARITY
+          && !hasSemanticConflict(embeddedIncoming, candidate),
+      )
+      .sort(
+        (left, right) =>
+          right.similarity - left.similarity
+          || left.candidate.id.localeCompare(right.candidate.id),
+      )
+      .slice(0, RETRIEVAL_TOP_K);
+
+    if (candidateMatches.length === 0) return undefined;
+
+    const response = await this.runtime.rerank({
+      task: AiTask.SEMANTIC_RERANKING,
+      projectId: incoming.projectId,
+      query: embeddedIncoming.text,
+      documents: candidateMatches.map(({ candidate }) => candidate.text),
+    });
+
+    const admitted = response.results
+      .map((result) => {
+        const match = candidateMatches[result.index];
+        if (!match) return undefined;
+
+        return {
+          candidateId: match.candidate.id,
+          similarity: match.similarity,
+          rerankScore: result.relevanceScore,
+        };
+      })
+      .filter(
+        (
+          match,
+        ): match is {
+          candidateId: string;
+          similarity: number;
+          rerankScore: number;
+        } =>
+          match !== undefined
+          && match.rerankScore >= INCREMENTAL_RERANK_ADMISSION_SCORE,
+      )
+      .sort(
+        (left, right) =>
+          right.rerankScore - left.rerankScore
+          || right.similarity - left.similarity
+          || left.candidateId.localeCompare(right.candidateId),
+      );
+
+    return admitted[0];
   }
 
   private async planProjects(candidates: Array<Omit<SemanticCandidate, 'embedding'>>, metrics: SemanticExecutionMetrics, options: SemanticPlanOptions = {}): Promise<ProjectPlan[]> {

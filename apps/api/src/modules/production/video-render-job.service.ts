@@ -3,12 +3,13 @@ import { VideoRenderInputManifestStatus, VideoRenderJobFailureCode, VideoRenderJ
 import type { VideoRenderCompletionUpdate, VideoRenderFailureUpdate, VideoRenderProgressUpdate } from '@content-os/contracts';
 import { isValidVideoRenderOutputArtifact, VideoRenderInputRepository, VideoRenderJobRepository, VideoRenderJobRepositoryError } from '@content-os/storage';
 import { VideoRenderInputService } from './video-render-input.service';
+import { VideoRenderWorkerService } from './video-render-worker.service';
 import { MEDIA_STORAGE_PROVIDER, type MediaStorageProvider } from '../media/media-storage-provider';
 import { AGENT_PIPELINE_BRIDGE, observeAgentPipeline, type AgentPipelineBridge } from '../agent-runtime/agent-pipeline-bridge.token';
 
 @Injectable()
 export class VideoRenderJobService{
- constructor(private readonly manifests:VideoRenderInputRepository,private readonly jobs:VideoRenderJobRepository,private readonly renderInputs:VideoRenderInputService,@Inject(MEDIA_STORAGE_PROVIDER) private readonly storage:MediaStorageProvider,@Optional() @Inject(AGENT_PIPELINE_BRIDGE) private readonly agentPipeline?:AgentPipelineBridge){}
+ constructor(private readonly manifests:VideoRenderInputRepository,private readonly jobs:VideoRenderJobRepository,private readonly renderInputs:VideoRenderInputService,@Inject(MEDIA_STORAGE_PROVIDER) private readonly storage:MediaStorageProvider,@Optional() @Inject(AGENT_PIPELINE_BRIDGE) private readonly agentPipeline?:AgentPipelineBridge,@Optional() private readonly worker?:VideoRenderWorkerService){}
  async find(contentScriptId:string){const job=await this.jobs.findByContentScriptId(contentScriptId);if(!job)throw new NotFoundException('Video render job not found');return job;}
  async output(contentScriptId:string){
   const job=await this.jobs.findByContentScriptId(contentScriptId);
@@ -47,4 +48,20 @@ export class VideoRenderJobService{
   }
  }
  retry(contentScriptId:string){return this.enqueue(contentScriptId,true);}
+ async executeLocally(contentScriptId:string){
+  if(process.env.NODE_ENV==='production'||process.env.VIDEO_RENDER_LOCAL_EXECUTION==='false')throw new NotFoundException('Local render execution is unavailable');
+  let job=await this.jobs.findByContentScriptId(contentScriptId);
+  if(job?.status==='running'){
+   const updatedAt=Date.parse(job.updatedAt);
+   const staleAfterMs=Number(process.env.VIDEO_RENDER_LOCAL_STALE_AFTER_MS??5*60*1000);
+   if(!Number.isFinite(updatedAt)||!Number.isFinite(staleAfterMs)||Date.now()-updatedAt<staleAfterMs)throw new ConflictException({code:'video_render_not_queued',message:'Only the requested queued render may be executed locally'});
+   await this.jobs.fail({jobId:job.id,attemptId:job.attemptId,renderInputManifestId:job.renderInputManifestId,renderInputHash:job.renderInputHash});
+   job=await this.enqueue(contentScriptId,true);
+  }
+  if(!job||job.status!=='queued')throw new ConflictException({code:'video_render_not_queued',message:'Only the requested queued render may be executed locally'});
+  if(!this.worker)throw new NotFoundException('Local render execution is unavailable');
+  const result=await this.worker.runNext(contentScriptId);
+  if(!result||result.contentScriptId!==contentScriptId)throw new ConflictException({code:'video_render_execution_unavailable',message:'The requested render could not be claimed locally'});
+  return result;
+ }
 }

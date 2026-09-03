@@ -52,3 +52,9 @@ apps/api/*.db
 scripts/audio/.venv/
 *.wav
 __pycache__/
+.content-os-render-work/
+.content-os-audio/
+logs/research/
+tools/transcript-provider-benchmark/output/
+
+*.tsbuildinfo

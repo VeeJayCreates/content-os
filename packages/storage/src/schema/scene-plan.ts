@@ -11,7 +11,7 @@ export const plannedScenes = sqliteTable('planned_scenes', {
   id: text('id').primaryKey(), scenePlanId: text('scene_plan_id').notNull(), sceneIndex: integer('scene_index').notNull(), narration: text('narration').notNull(), narrationWordCount: integer('narration_word_count').notNull(),
   estimatedDurationMs: integer('estimated_duration_ms').notNull(), startEstimateMs: integer('start_estimate_ms').notNull(), endEstimateMs: integer('end_estimate_ms').notNull(), sceneType: text('scene_type').notNull(),
   mediaStrategy: text('media_strategy').notNull(), visualDescription: text('visual_description').notNull(), primarySearchQuery: text('primary_search_query'), alternateSearchQueries: text('alternate_search_queries', { mode: 'json' }).$type<string[]>().notNull(),
-  generatedMediaPrompt: text('generated_media_prompt'), onScreenText: text('on_screen_text'), subtitleText: text('subtitle_text').notNull(), citedFactIds: text('cited_fact_ids', { mode: 'json' }).$type<string[]>().notNull(),
+  generatedMediaPrompt: text('generated_media_prompt'), onScreenText: text('on_screen_text'), subtitleText: text('subtitle_text').notNull(), citedFactIds: text('cited_fact_ids', { mode: 'json' }).$type<string[]>().notNull(), geographicEntityIds: text('geographic_entity_ids_json', { mode: 'json' }).$type<string[]>().notNull().default([]),
   transitionRecommendation: text('transition_recommendation'), continuityNotes: text('continuity_notes'), manualReview: integer('manual_review', { mode: 'boolean' }).notNull(), manualReviewReason: text('manual_review_reason'),
   createdAt: text('created_at').notNull(), updatedAt: text('updated_at').notNull(),
 }, (table) => [uniqueIndex('planned_scenes_plan_index_unique').on(table.scenePlanId, table.sceneIndex)]);

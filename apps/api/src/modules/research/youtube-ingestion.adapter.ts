@@ -12,13 +12,13 @@ const YOUTUBE_HOSTS = new Set(['www.youtube.com', 'youtube.com']);
 export class YouTubeIngestionAdapter {
   constructor(private readonly channelResolver: YouTubeChannelResolver) {}
 
-  async fetchItems(sourceUrl: string): Promise<IngestionItem[]> {
+  async fetchItems(sourceUrl: string, recentUploadLimit = 50): Promise<IngestionItem[]> {
     const channel = await this.channelResolver.resolve(sourceUrl);
     const feedUrl = new URL('https://www.youtube.com/feeds/videos.xml');
     feedUrl.searchParams.set('channel_id', channel.channelId);
     const xml = await this.fetchFeed(feedUrl);
 
-    return this.parseFeed(xml);
+    return this.parseFeed(xml, recentUploadLimit);
   }
 
   private async fetchFeed(url: URL): Promise<string> {
@@ -124,7 +124,7 @@ export class YouTubeIngestionAdapter {
     return new TextDecoder().decode(body);
   }
 
-  private parseFeed(xml: string): IngestionItem[] {
+  private parseFeed(xml: string, recentUploadLimit: number): IngestionItem[] {
     const entries = xml.match(/<entry\b[\s\S]*?<\/entry>/gi) ?? [];
 
     if (entries.length === 0) {
@@ -132,7 +132,7 @@ export class YouTubeIngestionAdapter {
     }
 
     const items = entries
-      .slice(0, 50)
+      .slice(0, Math.max(1, Math.min(recentUploadLimit, 50)))
       .map((entry) => this.toVideoItem(entry))
       .filter((item): item is IngestionItem => item !== null);
 

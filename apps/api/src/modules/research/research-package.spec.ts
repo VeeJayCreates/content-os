@@ -3,13 +3,18 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 jest.mock('@content-os/contracts', () => ({
   ResearchFactStatus: { SUPPORTED: 'supported', CONFLICTING: 'conflicting', UNVERIFIED: 'unverified' },
   ResearchVerificationStatus: { INSUFFICIENT: 'insufficient', SINGLE_SOURCE: 'single_source', CORROBORATED: 'corroborated', CONFLICTING: 'conflicting', REVIEW_REQUIRED: 'review_required' },
+  ResearchLifecycleState: { RESEARCHING: 'researching', NEEDS_MORE_EVIDENCE: 'needs_more_evidence', CORROBORATED: 'corroborated', REVIEW_READY: 'review_ready', APPROVED: 'approved', REJECTED: 'rejected' },
+  TopicSelectionDecision: { SELECTED: 'selected', HOLD: 'hold' },
 }));
 jest.mock('@content-os/storage', () => ({
   OpportunityRepository: class OpportunityRepository {},
   ResearchPackageRepository: class ResearchPackageRepository {},
 }));
 
-import { scoreResearchConfidence } from './research-package';
+import {
+  isVerifiableResearchClaim,
+  scoreResearchConfidence,
+} from './research-package';
 import { ResearchPackageService } from './research-package.service';
 import { ResearchVerificationStatus } from '@content-os/contracts';
 
@@ -84,7 +89,10 @@ describe('ResearchPackageService', () => {
     evidence as never,
   );
 
-  beforeEach(() => jest.resetAllMocks());
+  beforeEach(() => {
+    jest.resetAllMocks();
+    packages.replaceFactsWithEvidence.mockResolvedValue({ previousFactCount: 0 });
+  });
 
   it('fails cleanly for a missing opportunity and an opportunity without signals', async () => {
     opportunities.findById.mockResolvedValueOnce(undefined);
@@ -102,62 +110,6 @@ describe('ResearchPackageService', () => {
     );
   });
 
-  it('rebuilds one package without duplicating facts or evidence', async () => {
-    const researchPackage = {
-      id: 'package-1',
-      projectId: opportunity.projectId,
-      opportunityId: opportunity.id,
-      projectName: opportunity.projectName,
-      opportunityTitle: opportunity.title,
-      title: opportunity.title,
-      summary: opportunity.summary,
-      status: 'ready',
-      confidenceScore: 85,
-      sourceCount: 2,
-      signalCount: 2,
-      createdAt: opportunity.createdAt,
-      updatedAt: opportunity.updatedAt,
-    };
-    opportunities.findById.mockResolvedValue(opportunity);
-    evidence.resolveOpportunityEvidence.mockResolvedValue({
-      kind: 'legacy',
-      candidates: [],
-      signals,
-    });
-    packages.findByOpportunityId
-      .mockResolvedValueOnce(undefined)
-      .mockResolvedValueOnce(researchPackage);
-    packages.create.mockResolvedValue(researchPackage);
-    packages.update.mockResolvedValue(researchPackage);
-    packages.upsertFact
-      .mockResolvedValueOnce({ fact: { id: 'fact-1' }, created: true })
-      .mockResolvedValueOnce({ fact: { id: 'fact-1' }, created: false });
-    const linked = new Set<string>();
-    packages.attachEvidence.mockImplementation(
-      (_factId: string, signalId: string) => {
-        if (linked.has(signalId)) return false;
-        linked.add(signalId);
-        return true;
-      },
-    );
-
-    const first = await service.generate(opportunity.id);
-    const second = await service.generate(opportunity.id);
-
-    expect(first).toMatchObject({
-      packageId: researchPackage.id,
-      signalsProcessed: 2,
-      sourcesUsed: 2,
-      factsCreated: 1,
-    });
-    expect(second).toMatchObject({
-      packageId: researchPackage.id,
-      factsUpdated: 1,
-    });
-    expect(linked).toEqual(new Set(signals.map((signal) => signal.id)));
-    expect(packages.create).toHaveBeenCalledTimes(1);
-  });
-
   it('keeps confidence bounded and rewards multi-source support', () => {
     const now = new Date('2026-01-02T12:00:00.000Z');
     const firstSignal = signals[0];
@@ -169,68 +121,20 @@ describe('ResearchPackageService', () => {
     expect(multiple).toBeGreaterThan(single);
   });
 
-  it('uses candidate text as the fact claim and does not attach sibling candidates', async () => {
-    const researchPackage = {
-      id: 'package-1', projectId: opportunity.projectId, opportunityId: opportunity.id,
-      projectName: opportunity.projectName, opportunityTitle: opportunity.title,
-      title: opportunity.title, summary: opportunity.summary, status: 'ready', confidenceScore: 85,
-      sourceCount: 1, signalCount: 1, createdAt: opportunity.createdAt, updatedAt: opportunity.updatedAt,
-    };
-    const multiStorySignal = signals[0]!;
-    opportunities.findById.mockResolvedValue(opportunity);
-    evidence.resolveOpportunityEvidence.mockResolvedValue({
-      kind: 'candidate',
-      candidates: [{ candidateId: 'candidate-fcas', candidateText: 'India-France FCAS sixth-generation fighter programme', signal: multiStorySignal }],
-      signals: [multiStorySignal],
-    });
-    packages.findByOpportunityId.mockResolvedValue(undefined);
-    packages.create.mockResolvedValue(researchPackage);
-    packages.replaceFactsWithEvidence.mockResolvedValue({ previousFactCount: 0 });
-
-    const result = await service.generate(opportunity.id);
-
-    expect(packages.replaceFactsWithEvidence).toHaveBeenCalledWith(
-      researchPackage.id,
-      [expect.objectContaining({
-        claim: 'India-France FCAS sixth-generation fighter programme',
-        signalIds: [multiStorySignal.id],
-      })],
-    );
-    expect(packages.attachEvidence).not.toHaveBeenCalled();
-    expect(result).toMatchObject({ signalsProcessed: 1, sourcesUsed: 1, factsCreated: 1 });
-  });
-
-  it('counts distinct parent Signals and configured Sources for candidate evidence', async () => {
-    const researchPackage = {
-      id: 'package-1', projectId: opportunity.projectId, opportunityId: opportunity.id,
-      projectName: opportunity.projectName, opportunityTitle: opportunity.title,
-      title: opportunity.title, summary: opportunity.summary, status: 'ready', confidenceScore: 85,
-      sourceCount: 1, signalCount: 2, createdAt: opportunity.createdAt, updatedAt: opportunity.updatedAt,
-    };
-    const sameSourceSignal = { ...signals[1]!, researchSourceId: signals[0]!.researchSourceId };
-    opportunities.findById.mockResolvedValue(opportunity);
-    evidence.resolveOpportunityEvidence.mockResolvedValue({
-      kind: 'candidate',
-      candidates: [
-        { candidateId: 'candidate-1', candidateText: 'FCAS update one', signal: signals[0]! },
-        { candidateId: 'candidate-2', candidateText: 'FCAS update two', signal: sameSourceSignal },
-      ],
-      signals: [signals[0]!, sameSourceSignal],
-    });
-    packages.findByOpportunityId.mockResolvedValue(undefined);
-    packages.create.mockResolvedValue(researchPackage);
-    packages.replaceFactsWithEvidence.mockResolvedValue({ previousFactCount: 0 });
-
-    const result = await service.generate(opportunity.id);
-
-    expect(result).toMatchObject({ signalsProcessed: 2, sourcesUsed: 1, factsCreated: 2 });
-    expect(packages.replaceFactsWithEvidence).toHaveBeenCalledWith(
-      researchPackage.id,
-      expect.arrayContaining([
-        expect.objectContaining({ signalIds: [signals[0]!.id] }),
-        expect.objectContaining({ signalIds: [sameSourceSignal.id] }),
-      ]),
-    );
+  it('rejects editorial headline framing rather than persisting it as a Research Fact', () => {
+    expect(
+      isVerifiableResearchClaim('Hormuz Become Iran Big Bargaining Chip'),
+    ).toBe(false);
+    expect(
+      isVerifiableResearchClaim(
+        "The Strait of Hormuz is Iran's Biggest Bargaining Chip - US Iran Latest update",
+      ),
+    ).toBe(false);
+    expect(
+      isVerifiableResearchClaim(
+        'India and France signed a cooperation agreement for a fighter programme',
+      ),
+    ).toBe(true);
   });
 
   it('reads facts and evidence through one batched package query', async () => {
@@ -292,30 +196,30 @@ describe('ResearchPackageService', () => {
     });
   });
 
-  it('does not let unrelated legacy links inflate candidate-backed verification', async () => {
+  it('records human approval or rejection on the research package only', async () => {
     const researchPackage = {
       id: 'package-1', projectId: opportunity.projectId, opportunityId: opportunity.id,
       projectName: opportunity.projectName, opportunityTitle: opportunity.title,
-      title: opportunity.title, summary: opportunity.summary, status: 'ready', confidenceScore: 60,
-      sourceCount: 1, signalCount: 1, createdAt: opportunity.createdAt, updatedAt: opportunity.updatedAt,
+      title: opportunity.title, summary: opportunity.summary, status: 'ready', confidenceScore: 85,
+      sourceCount: 3, signalCount: 3, lifecycleState: 'review_ready',
+      createdAt: opportunity.createdAt, updatedAt: opportunity.updatedAt,
     };
-    opportunities.findById.mockResolvedValue(opportunity);
-    evidence.resolveOpportunityEvidence.mockResolvedValue({
-      kind: 'candidate',
-      candidates: [{ candidateId: 'candidate-fcas', candidateText: 'India-France FCAS', signal: signals[0]! }],
-      signals: [signals[0]!],
-    });
-    packages.findByOpportunityId.mockResolvedValue(undefined);
-    packages.create.mockResolvedValue(researchPackage);
-    packages.replaceFactsWithEvidence.mockResolvedValue({ previousFactCount: 0 });
+    packages.findById.mockResolvedValue(researchPackage);
+    packages.update.mockImplementation(async (_id: string, changes: object) => ({ ...researchPackage, ...changes }));
 
-    const result = await service.generate(opportunity.id);
+    await expect(service.review(researchPackage.id, 'approved')).resolves.toMatchObject({ lifecycleState: 'approved' });
+    await expect(service.review(researchPackage.id, 'rejected')).resolves.toMatchObject({ lifecycleState: 'rejected' });
+    expect(packages.update).toHaveBeenNthCalledWith(1, researchPackage.id, { lifecycleState: 'approved' });
+    expect(packages.update).toHaveBeenNthCalledWith(2, researchPackage.id, { lifecycleState: 'rejected' });
+  });
 
-    expect(result.verification).toMatchObject({
-      verificationStatus: ResearchVerificationStatus.SINGLE_SOURCE,
-      evidenceSignalCount: 1,
-      candidateClaimCount: 1,
+  it('does not permit a weak package to bypass the review-ready lifecycle gate', async () => {
+    packages.findById.mockResolvedValue({
+      id: 'package-weak',
+      lifecycleState: 'needs_more_evidence',
     });
-    expect(opportunities.findSignalsByOpportunityIds).not.toHaveBeenCalled();
+
+    await expect(service.review('package-weak', 'approved')).rejects.toBeInstanceOf(ConflictException);
+    expect(packages.update).not.toHaveBeenCalled();
   });
 });

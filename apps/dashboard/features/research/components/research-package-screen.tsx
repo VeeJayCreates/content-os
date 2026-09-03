@@ -10,6 +10,7 @@ import { ExternalLink, RefreshCw } from "lucide-react";
 
 import {
   getResearchPackage,
+  expandResearch,
   ResearchApiError,
 } from "@/features/research/api/client";
 import { formatResearchDate } from "@/features/research/research-utils";
@@ -31,6 +32,7 @@ export function ResearchPackageScreen({ packageId }: { packageId: string }) {
   const [error, setError] = React.useState<string | null>(null);
   const mounted = React.useRef(false);
   const requestId = React.useRef(0);
+  const [expanding, setExpanding] = React.useState(false);
   const fetchPackage = React.useCallback(async () => {
     const id = ++requestId.current;
     try {
@@ -161,6 +163,20 @@ export function ResearchPackageScreen({ packageId }: { packageId: string }) {
             }
           />
           <div className="sm:col-span-3">
+            {!researchPackage.verification.canProceedAutomatically ? (
+              <Button
+                variant="outline"
+                disabled={expanding}
+                onClick={async () => {
+                  setExpanding(true);
+                  try { await expandResearch(researchPackage.opportunityId); await fetchPackage(); }
+                  finally { if (mounted.current) setExpanding(false); }
+                }}
+              >
+                <RefreshCw className="size-4" />
+                {expanding ? "Finding evidence…" : "Find more evidence"}
+              </Button>
+            ) : null}
             <ul className="grid gap-1 text-sm text-muted-foreground">
               {researchPackage.verification.verificationReasons.map(
                 (reason) => (

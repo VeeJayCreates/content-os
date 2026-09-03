@@ -12,9 +12,11 @@ import { dirname, extname, join, resolve } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
 import type {
+  InternalVisualSpecification,
   VideoRenderInputManifest,
   VideoRenderSceneInput,
 } from '@content-os/contracts';
+import { validateInternalVisualSpecification } from '@content-os/contracts';
 import {
   MEDIA_STORAGE_PROVIDER,
   type MediaStorageProvider,
@@ -30,6 +32,27 @@ export type RendererCommand = (
   quota?: RendererOutputQuota,
   timeoutMs?: number,
 ) => Promise<string>;
+export class RendererProcessError extends Error {
+  constructor(readonly safeCode: string) {
+    super(safeCode);
+  }
+}
+export const classifyRendererProcessFailure = (
+  binary: string,
+  exitCode: number | null,
+  output: string,
+) => {
+  const value = output.toLowerCase();
+  if (value.includes('could not find a browser') || value.includes('browser executable'))
+    return 'remotion_browser_unavailable';
+  if (value.includes('cannot find module') || value.includes('failed to bundle'))
+    return 'remotion_bundle_failed';
+  if (value.includes('composition') && value.includes('not found'))
+    return 'remotion_composition_unavailable';
+  if (binary.toLowerCase().includes('ffmpeg')) return 'ffmpeg_export_failed';
+  if (binary.toLowerCase().includes('ffprobe')) return 'ffprobe_failed';
+  return `renderer_process_${exitCode ?? 'unknown'}`;
+};
 export const DEFAULT_RENDER_COMMAND_TIMEOUT_MS = 10 * 60 * 1000;
 export const runRendererCommand: RendererCommand = (
   binary,
@@ -86,7 +109,7 @@ export const runRendererCommand: RendererCommand = (
       if (pendingError) return fail(pendingError);
       return code === 0
         ? ok(output)
-        : fail(new Error(`renderer_process_${code ?? 'unknown'}`));
+        : fail(new RendererProcessError(classifyRendererProcessFailure(binary, code, output)));
     });
   });
 export const DEFAULT_RENDER_LIMITS = {
@@ -121,6 +144,13 @@ const validateSceneMedia = (scene: VideoRenderSceneInput, provider: string) => {
       ].some((value) => value !== null)
     )
       throw new Error('invalid_media_binding');
+    if (scene.internalVisual !== null && scene.internalVisual !== undefined) {
+      try {
+        validateInternalVisualSpecification(scene.internalVisual);
+      } catch {
+        throw new Error('invalid_internal_visual');
+      }
+    }
     return false;
   }
   if (
@@ -263,7 +293,12 @@ export class FfmpegVideoRenderer implements VideoRenderer {
       const durationInFrames = endFrame - previousFrame;
       if (durationInFrames < 1) throw new Error('invalid_timeline');
       previousFrame = endFrame;
-      const item: RemotionMotionScene = { durationInFrames, audio: audioName, motion: scene.motion ?? null };
+      const item: RemotionMotionScene = {
+        durationInFrames,
+        audio: audioName,
+        motion: scene.motion ?? null,
+        internalVisual: scene.internalVisual as InternalVisualSpecification | null,
+      };
       if (hasMedia) {
         const name = `media-${index}${extname(scene.storageKey!) || '.asset'}`;
         await pipeline(

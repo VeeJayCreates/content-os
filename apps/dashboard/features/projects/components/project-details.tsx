@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProjectEditorialProfileEditor } from "@/features/projects/components/project-editorial-profile";
 import { ContentStyleProfileEditor } from "@/features/projects/components/content-style-profile";
+import { ProjectChannelHierarchy } from "@/features/projects/components/project-channel-hierarchy";
 
 type ProjectDetailsProps = {
   project: Project;
@@ -38,6 +39,7 @@ export function ProjectDetails({ project }: ProjectDetailsProps) {
           <Metadata label="Last updated" value={formatProjectDate(project.updatedAt)} icon={<CalendarDays className="size-3.5" />} />
         </CardContent>
       </Card>
+      <ProjectChannelHierarchy key={`hierarchy-${project.id}`} projectId={project.id} />
       <ProjectEditorialProfileEditor key={project.id} projectId={project.id} />
       <ContentStyleProfileEditor key={`style-${project.id}`} projectId={project.id} />
     </section>

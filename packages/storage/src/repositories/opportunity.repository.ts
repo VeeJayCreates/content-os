@@ -30,6 +30,21 @@ export class OpportunityRepository {
     return projectId ? query.where(eq(opportunities.projectId, projectId)).orderBy(desc(opportunities.score), desc(opportunities.lastSeenAt)) : query.orderBy(desc(opportunities.score), desc(opportunities.lastSeenAt));
   }
 
+  /**
+   * Bounded lookup for incremental topic joining.  Unlike the legacy detector,
+   * callers must not load a project's complete opportunity history merely to
+   * decide where one newly ingested source item belongs.
+   */
+  async findRecentByProject(projectId: string, limit: number): Promise<OpportunityWithProject[]> {
+    return db
+      .select({ ...opportunityColumns, projectName: projects.name })
+      .from(opportunities)
+      .innerJoin(projects, eq(opportunities.projectId, projects.id))
+      .where(eq(opportunities.projectId, projectId))
+      .orderBy(desc(opportunities.lastSeenAt), desc(opportunities.updatedAt))
+      .limit(limit);
+  }
+
   async findById(id: string): Promise<OpportunityWithProject | undefined> {
     const rows = await db.select({ ...opportunityColumns, projectName: projects.name }).from(opportunities).innerJoin(projects, eq(opportunities.projectId, projects.id)).where(eq(opportunities.id, id));
     return rows[0];
@@ -46,6 +61,18 @@ export class OpportunityRepository {
     const rows = await db.select({ opportunityId: opportunitySignals.opportunityId, signal: signals, sourceName: researchSources.name }).from(opportunitySignals).innerJoin(signals, eq(opportunitySignals.signalId, signals.id)).innerJoin(researchSources, eq(signals.researchSourceId, researchSources.id)).where(inArray(opportunitySignals.opportunityId, ids));
     for (const row of rows) grouped.set(row.opportunityId, [...(grouped.get(row.opportunityId) ?? []), { ...row.signal, sourceName: row.sourceName }]);
     return grouped;
+  }
+
+  async findBySignalIds(signalIds: string[]): Promise<Map<string, OpportunityWithProject>> {
+    const result = new Map<string, OpportunityWithProject>();
+    if (!signalIds.length) return result;
+    const rows = await db.select({ signalId: opportunitySignals.signalId, opportunity: opportunities, projectName: projects.name })
+      .from(opportunitySignals)
+      .innerJoin(opportunities, eq(opportunitySignals.opportunityId, opportunities.id))
+      .innerJoin(projects, eq(opportunities.projectId, projects.id))
+      .where(inArray(opportunitySignals.signalId, signalIds));
+    for (const row of rows) if (!result.has(row.signalId)) result.set(row.signalId, { ...row.opportunity, projectName: row.projectName });
+    return result;
   }
 
   async create(data: Omit<NewOpportunity, 'id' | 'createdAt' | 'updatedAt'>): Promise<OpportunityWithProject> {

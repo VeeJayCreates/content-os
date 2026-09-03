@@ -7,6 +7,7 @@ import type {
   ProjectEditorialProfileUpdateInput,
   ProjectContentStyleProfile,
   ProjectContentStyleProfileUpdateInput,
+  ProjectChannelHierarchy,
 } from "@content-os/contracts";
 
 const projectsEndpoint = "/api/projects";
@@ -108,3 +109,4 @@ export function updateProjectEditorialProfile(
 
 export function getContentStyleProfile(projectId: string) { return request<ProjectContentStyleProfile>(`/${encodeURIComponent(projectId)}/content-style`); }
 export function updateContentStyleProfile(projectId: string, profile: ProjectContentStyleProfileUpdateInput) { return request<ProjectContentStyleProfile>(`/${encodeURIComponent(projectId)}/content-style`, { method: 'PUT', body: JSON.stringify(profile) }); }
+export function getProjectChannelHierarchy(projectId: string) { return request<ProjectChannelHierarchy>(`/${encodeURIComponent(projectId)}/channel-hierarchy`); }

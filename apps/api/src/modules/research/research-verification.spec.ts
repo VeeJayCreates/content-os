@@ -53,7 +53,7 @@ describe('evaluateResearchVerification', () => {
     });
   });
 
-  it('corroborates relevant evidence from two configured sources', () => {
+  it('does not promote two configured sources to corroboration', () => {
     expect(
       evaluateResearchVerification({
         signals: [
@@ -67,9 +67,37 @@ describe('evaluateResearchVerification', () => {
         ],
       }),
     ).toMatchObject({
-      verificationStatus: ResearchVerificationStatus.CORROBORATED,
+      verificationStatus: ResearchVerificationStatus.INSUFFICIENT,
       evidenceSignalCount: 2,
       independentSourceCount: 2,
+      canProceedAutomatically: false,
+    });
+  });
+
+  it('counts description and transcript records for one video as one supporting content', () => {
+    const result = evaluateResearchVerification({
+      signals: [{ signalId: 'video-1', researchSourceId: 'channel-1' }],
+      supportingContents: [{ contentId: 'video-1', sourceIdentityId: 'channel-1' }],
+      evidenceRecordCount: 3,
+      candidateClaimCount: 1,
+      facts: [{ status: ResearchFactStatus.SUPPORTED }],
+    });
+    expect(result).toMatchObject({ supportingContentCount: 1, evidenceRecordCount: 3, distinctSourceCount: 1, canProceedAutomatically: false });
+  });
+
+  it('requires three evidence items, three source identities, and grounded supported material', () => {
+    expect(evaluateResearchVerification({
+      signals: [
+        { signalId: 'signal-1', researchSourceId: 'source-a' },
+        { signalId: 'signal-2', researchSourceId: 'source-b' },
+        { signalId: 'signal-3', researchSourceId: 'source-c' },
+      ],
+      candidateClaimCount: 1,
+      facts: [{ status: ResearchFactStatus.SUPPORTED }],
+    })).toMatchObject({
+      verificationStatus: ResearchVerificationStatus.CORROBORATED,
+      evidenceSignalCount: 3,
+      independentSourceCount: 3,
       canProceedAutomatically: true,
     });
   });

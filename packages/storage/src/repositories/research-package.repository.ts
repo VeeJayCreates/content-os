@@ -41,9 +41,13 @@ export type ResearchFactReplacement = {
   confidence: number;
   status: string;
   signalIds: string[];
+  geographicEntities?: unknown[];
 };
 
 export class ResearchPackageRepository {
+  async setFactGeographicEntities(factId: string, geographicEntities: unknown[]) {
+    await db.update(researchFacts).set({ geographicEntities }).where(eq(researchFacts.id, factId));
+  }
   async findAll(projectId?: string): Promise<ResearchPackageWithContext[]> {
     const query = db
       .select({
@@ -146,15 +150,16 @@ export class ResearchPackageRepository {
           status: data.status,
         })
         .where(eq(researchFacts.id, existing.id));
-      return { fact: { ...existing, ...data }, created: false };
+      return { fact: { ...existing, ...data, geographicEntities: data.geographicEntities ?? existing.geographicEntities ?? [] }, created: false };
     }
     const fact: NewResearchFact = {
       id: randomUUID(),
       createdAt: new Date().toISOString(),
       ...data,
+      geographicEntities: data.geographicEntities ?? [],
     };
     await db.insert(researchFacts).values(fact);
-    return { fact, created: true };
+    return { fact: { ...fact, geographicEntities: fact.geographicEntities ?? [] }, created: true };
   }
 
   async attachEvidence(
@@ -205,6 +210,7 @@ export class ResearchPackageRepository {
             normalizedClaimKey: replacement.normalizedClaimKey,
             confidence: replacement.confidence,
             status: replacement.status,
+            geographicEntities: replacement.geographicEntities ?? [],
             createdAt: now,
           })
           .run();
@@ -270,6 +276,7 @@ export class ResearchPackageRepository {
       ]);
     return grouped;
   }
+
 
   private async findFactByKey(
     researchPackageId: string,

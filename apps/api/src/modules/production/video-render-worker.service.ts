@@ -3,7 +3,8 @@ import { realpath, rm, stat, mkdir } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import type { Readable } from 'node:stream';
 import { resolve, join, sep } from 'node:path';
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { tmpdir } from 'node:os';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import {
   VideoRenderInputRepository,
   VideoRenderJobRepository,
@@ -16,6 +17,8 @@ import { VIDEO_RENDERER, type VideoRenderer } from './video-renderer';
 import { AGENT_PIPELINE_BRIDGE, observeAgentPipeline, type AgentPipelineBridge } from '../agent-runtime/agent-pipeline-bridge.token';
 
 const MAX_OUTPUT_BYTES = 500 * 1024 * 1024;
+export const defaultRenderWorkRoot = () =>
+  resolve(process.env.VIDEO_RENDER_WORK_ROOT || join(tmpdir(), 'content-os-render-work'));
 async function fingerprint(stream: Readable) {
   const hash = createHash('sha256');
   let sizeBytes = 0;
@@ -37,8 +40,8 @@ export class VideoRenderWorkerService {
     private readonly storage: MediaStorageProvider,
     @Optional() @Inject(AGENT_PIPELINE_BRIDGE) private readonly agentPipeline?: AgentPipelineBridge,
   ) {}
-  async runNext() {
-    const claim = await this.jobs.claimNextQueued();
+  async runNext(contentScriptId?: string) {
+    const claim = await this.jobs.claimNextQueued(contentScriptId);
     if (!claim) return undefined;
     await observeAgentPipeline(this.agentPipeline?.synchronizeContentScript(claim.contentScriptId));
     const identity = {
@@ -47,10 +50,7 @@ export class VideoRenderWorkerService {
       renderInputManifestId: claim.renderInputManifestId,
       renderInputHash: claim.renderInputHash,
     };
-    const configuredRoot = resolve(
-      process.env.VIDEO_RENDER_WORK_ROOT ||
-        join(process.cwd(), '.content-os-render-work'),
-    );
+    const configuredRoot = defaultRenderWorkRoot();
     let dir: string | undefined;
     let storageKey: string | undefined;
     let createdStoredObject = false;
@@ -133,7 +133,15 @@ export class VideoRenderWorkerService {
       });
       await observeAgentPipeline(this.agentPipeline?.synchronizeContentScript(claim.contentScriptId));
       return completed;
-    } catch {
+    } catch (error) {
+      const safeCode =
+        error instanceof Error && /^[a-z0-9_]{1,80}$/i.test(error.message)
+          ? error.message
+          : 'render_execution_failed';
+      Logger.error(
+        `Video render execution failed at worker_render: ${safeCode}`,
+        'VideoRenderWorkerService',
+      );
       if (createdStoredObject && storageKey)
         await this.storage.remove(storageKey).catch(() => undefined);
       await this.jobs.fail(identity).catch(() => undefined);

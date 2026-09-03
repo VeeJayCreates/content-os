@@ -6,6 +6,7 @@ export class VideoRenderJobController{
  constructor(private readonly service:VideoRenderJobService){}
  @Post(':id/video-render-jobs')enqueue(@Param('id',new ParseUUIDPipe())id:string){return this.service.enqueue(id);}
  @Post(':id/video-render-jobs/retry')retry(@Param('id',new ParseUUIDPipe())id:string){return this.service.retry(id);}
+ @Post(':id/video-render-jobs/execute-local')executeLocal(@Param('id',new ParseUUIDPipe())id:string){return this.service.executeLocally(id);}
  @Get(':id/video-render-job')find(@Param('id',new ParseUUIDPipe())id:string){return this.service.find(id);}
  @Get(':id/video-render-job/output')
  @Header('Cache-Control','private, no-store')

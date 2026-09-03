@@ -6,6 +6,8 @@ import { SelectionPolicyService } from './selection-policy.service';
 import { ProjectEditorialProfileController } from './project-editorial-profile.controller';
 import { ProjectEditorialProfileService } from './project-editorial-profile.service';
 import { ProjectService } from './project.service';
+import { ProjectChannelController } from './project-channel.controller';
+import { ProjectChannelService } from './project-channel.service';
 import { ContentStyleProfileController } from './content-style-profile.controller';
 import { ContentStyleProfileService } from './content-style-profile.service';
 import { StorageModule } from '../../storage/storage.module';
@@ -17,12 +19,14 @@ import { StorageModule } from '../../storage/storage.module';
     SelectionPolicyController,
     ProjectEditorialProfileController,
     ContentStyleProfileController,
+    ProjectChannelController,
   ],
   providers: [
     ProjectService,
     SelectionPolicyService,
     ProjectEditorialProfileService,
     ContentStyleProfileService,
+    ProjectChannelService,
   ],
 })
 export class ProjectModule {}

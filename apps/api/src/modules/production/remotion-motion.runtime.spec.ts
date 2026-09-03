@@ -38,6 +38,42 @@ describe('Remotion Motion Runtime V1', () => {
     expect(entry).toContain('map.markers');
   });
 
+  it('dispatches immutable internal visual snapshots to full-frame reusable scenes', () => {
+    const entry = remotionMotionEntrySource();
+    expect(entry).toContain('const InternalVisualScene=');
+    expect(entry).toContain("visual.type==='map'");
+    expect(entry).toContain("visual.type==='flow_or_corridor'");
+    expect(entry).toContain("visual.type==='text_card'");
+    expect(entry).toContain('const MapScene=');
+    expect(entry).toContain('const FlowCorridorScene=');
+    expect(entry).toContain('const TextCardScene=');
+  });
+
+  it('keeps map and corridor animation data-driven by their internal specifications', () => {
+    const entry = remotionMotionEntrySource();
+    expect(entry).toContain('spec.highlightedRegions');
+    expect(entry).toContain('spec.routes');
+    expect(entry).toContain('spec.markers');
+    expect(entry).toContain('strokeDashoffset');
+    expect(entry).toContain('spec.lanes');
+    expect(entry).toContain('spec.pressureZone');
+    expect(entry).toContain('spec.labels');
+  });
+
+  it('renders text-card content only from its bounded snapshot fields', () => {
+    const entry = remotionMotionEntrySource();
+    expect(entry).toContain('spec.primaryText');
+    expect(entry).toContain('spec.secondaryText');
+    expect(entry).toContain('spec.emphasis');
+    expect(entry).toContain('spec.layout');
+  });
+
+  it('uses an internal visual in the scene canvas and retains legacy map cards only as a fallback', () => {
+    const entry = remotionMotionEntrySource();
+    expect(entry).toContain('media||<InternalVisualScene');
+    expect(entry).toContain('!scene.internalVisual?<MapChoreography');
+  });
+
   it('keeps missing motion on the backwards-compatible static/cut fallback', () => {
     expect(remotionMotionEntrySource()).toContain("scene.motion||{cameraMotion:'static',transition:'cut',overlays:[],map:null}");
   });

@@ -134,7 +134,7 @@ export class VisualAssetRepository {
       const requirements = tx.select().from(sceneVisualRequirements).where(eq(sceneVisualRequirements.manifestId, manifestId)).all();
       const candidates = tx.select().from(visualAssetCandidates).all();
       const unresolved = requirements.some((requirement) => {
-        if (requirement.acquisitionStrategy === 'none_required') return false;
+        if (['none_required', 'reusable_template', 'programmatic_specification'].includes(requirement.acquisitionStrategy) && !requirement.manualReviewRequired) return false;
         if (requirement.manualReviewRequired) return true;
         return !candidateSatisfies(requirement, candidates.find((candidate) => candidate.id === requirement.selectedCandidateId));
       });

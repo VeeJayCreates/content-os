@@ -66,6 +66,23 @@ export enum ResearchFactStatus {
   UNVERIFIED = "unverified",
 }
 
+export enum ContentChannelStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+}
+/** Topic-level research progression. Approval remains an explicit human action. */
+export enum ResearchLifecycleState {
+  DISCOVERED = 'discovered',
+  RESEARCHING = 'researching',
+  NEEDS_MORE_EVIDENCE = 'needs_more_evidence',
+  CORROBORATED = 'corroborated',
+  REVIEW_READY = 'review_ready',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+}
+export enum SourceEvidenceContentType { DESCRIPTION = 'description', TRANSCRIPT = 'transcript', ARTICLE_BODY = 'article_body', EXCERPT = 'excerpt', SOURCE_SUMMARY = 'source_summary' }
+export enum SourceEvidenceContentStatus { AVAILABLE = 'available', UNAVAILABLE = 'unavailable', FAILED = 'failed' }
+
 export enum ResearchVerificationStatus {
   INSUFFICIENT = 'insufficient',
   SINGLE_SOURCE = 'single_source',

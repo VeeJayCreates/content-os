@@ -5,10 +5,12 @@ import type { VideoRenderJob } from "@content-os/contracts";
 import { Button } from "@/components/ui/button";
 import {
   bindVideoCompositionAssets,
+  executeVideoRenderLocally,
   enqueueVideoRender,
   getVideoRenderStatus,
   prepareVideoComposition,
   prepareVideoRenderInput,
+  prepareVideoMotionPlan,
   ResearchApiError,
   retryVideoRender,
   videoRenderOutputUrl,
@@ -92,12 +94,17 @@ export function VideoRenderPanel({ contentScriptId }: { contentScriptId: string 
         : await runVideoRenderSequence(contentScriptId, {
             prepareComposition: prepareVideoComposition,
             bindAssets: bindVideoCompositionAssets,
+            prepareMotionPlan: prepareVideoMotionPlan,
             prepareInput: prepareVideoRenderInput,
             enqueue: enqueueVideoRender,
           });
       if (mounted.current && requests.current.isCurrent(requestId)) {
         setJob(value);
         setStatusPhase("available");
+      }
+      if (value.status === "queued") {
+        const completed = await executeVideoRenderLocally(contentScriptId);
+        if (mounted.current && requests.current.isCurrent(requestId)) setJob(completed);
       }
     } catch (reason) {
       if (mounted.current && requests.current.isCurrent(requestId))

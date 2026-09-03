@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { AudioGenerationStatus, ScenePlanStatus, VideoCompositionAssetStrategy, VideoCompositionFailureCode, VideoCompositionPlanStatus, VisualAssetManifestStatus, type VideoCompositionAssetPreparationResult, type VideoCompositionSceneAssetPreparationResult } from '@content-os/contracts';
+import { AudioGenerationStatus, ScenePlanStatus, VideoCompositionAssetStrategy, VideoCompositionFailureCode, VideoCompositionPlanStatus, VisualAssetManifestStatus, validateInternalVisualSpecification, type VideoCompositionAssetPreparationResult, type VideoCompositionSceneAssetPreparationResult } from '@content-os/contracts';
 import { AudioGenerationRepository, ContentScriptRepository, ScenePlanRepository, VideoCompositionRepository, VisualAssetRepository } from '@content-os/storage';
 import { MediaMaterializationService } from '../media/media-materialization.service';
 
@@ -37,7 +37,7 @@ export class VideoCompositionService {
     if(segment.status!=='ready'||segment.startMs===null||segment.endMs===null||segment.actualDurationMs===null||segment.startMs!==expectedStart||segment.endMs<=segment.startMs||segment.endMs-segment.startMs!==segment.actualDurationMs)this.fail(VideoCompositionFailureCode.AUDIO_TIMING_INVALID,`Audio timing is invalid at scene ${index}`);expectedStart=segment.endMs;
     if(!requirement.id)this.fail(VideoCompositionFailureCode.VISUAL_REQUIREMENT_MISSING,`Visual requirement is missing at scene ${index}`);
     if(requirement.manualReviewRequired)this.fail(VideoCompositionFailureCode.MANUAL_REVIEW_REQUIRED,`Visual requirement requires manual review at scene ${index}`);
-    if(requirement.acquisitionStrategy==='none_required')return {plannedSceneId:scene.id,audioSegmentId:segment.id,audioStartMs:segment.startMs,audioEndMs:segment.endMs,audioDurationMs:segment.actualDurationMs,visualRequirementId:requirement.id,visualRequirementType:requirement.requirementType,assetStrategy:VideoCompositionAssetStrategy.NO_ASSET,selectedCandidateId:null,candidateIdentityHash:null};
+    if(['none_required','reusable_template','programmatic_specification'].includes(requirement.acquisitionStrategy)){const internalVisual=validateInternalVisualSpecification(requirement.internalVisual);return {plannedSceneId:scene.id,audioSegmentId:segment.id,audioStartMs:segment.startMs,audioEndMs:segment.endMs,audioDurationMs:segment.actualDurationMs,visualRequirementId:requirement.id,visualRequirementType:requirement.requirementType,assetStrategy:VideoCompositionAssetStrategy.NO_ASSET,selectedCandidateId:null,candidateIdentityHash:null,internalVisual};}
     if(!requirement.selectedCandidateId)this.fail(VideoCompositionFailureCode.SELECTED_CANDIDATE_MISSING,`Selected visual candidate is required at scene ${index}`);
     const candidate=(requirement as any).candidates?.find((item:any)=>item.id===requirement.selectedCandidateId);
     const licence=requirement.licenceRequirements;
@@ -45,7 +45,7 @@ export class VideoCompositionService {
     const provenanceIncomplete=!candidate?.provider||!Number.isFinite(candidate.provenanceScore)||(!candidate.licenceType&&!candidate.licenceUrl);
     if(!candidate||!['selected','approved'].includes(candidate.status)||candidate.mediaType!==requirement.expectedMediaType||(!candidate.sourceUrl&&!candidate.providerAssetId)||(candidate.rejectionReasons?.length??0)>0||(licence.commercialUseRequired&&candidate.commercialUseAllowed!==true)||(licence.modificationAllowed&&candidate.modificationAllowed!==true)||(licence.attributionRequired&&!candidate.attributionText)||(licence.provenanceRequired&&provenanceIncomplete)||(licence.unknownLicenceRequiresManualReview&&rightsUnknown))this.fail(VideoCompositionFailureCode.SELECTED_CANDIDATE_INCOMPATIBLE,`Selected visual candidate is incompatible at scene ${index}`);
     const candidateIdentityHash=candidateHash(candidate);
-    return {plannedSceneId:scene.id,audioSegmentId:segment.id,audioStartMs:segment.startMs,audioEndMs:segment.endMs,audioDurationMs:segment.actualDurationMs,visualRequirementId:requirement.id,visualRequirementType:requirement.requirementType,assetStrategy:VideoCompositionAssetStrategy.SELECTED_CANDIDATE,selectedCandidateId:candidate.id,candidateIdentityHash};
+    return {plannedSceneId:scene.id,audioSegmentId:segment.id,audioStartMs:segment.startMs,audioEndMs:segment.endMs,audioDurationMs:segment.actualDurationMs,visualRequirementId:requirement.id,visualRequirementType:requirement.requirementType,assetStrategy:VideoCompositionAssetStrategy.SELECTED_CANDIDATE,selectedCandidateId:candidate.id,candidateIdentityHash,internalVisual:null};
    });
    if(audio.totalDurationMs===null||audio.totalDurationMs!==expectedStart)this.fail(VideoCompositionFailureCode.AUDIO_TIMING_INVALID,'Audio total duration does not match scene timing');
    const identity={contentScriptId:script.id,scenePlanId:plan.id,scenePlanInputHash:plan.inputHash,audioGenerationId:audio.id,audioInputHash:audio.inputHash,visualAssetManifestId:manifest.id,visualManifestInputHash:manifest.inputHash};

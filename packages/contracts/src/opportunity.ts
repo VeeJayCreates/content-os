@@ -1,5 +1,6 @@
 import type { ResearchSourceProject } from "./research-source.js";
 import type { OpportunityMetricsV2 } from "./opportunity-metrics.js";
+import type { TranscriptReviewStatus } from "./signal.js";
 import { OpportunityStatus } from "./enums.js";
 
 export interface Opportunity {
@@ -33,7 +34,13 @@ export interface OpportunitySignal {
   url: string;
   summary: string | null;
   sourceName: string;
+  publishedAt: string | null;
   discoveredAt: string;
+  transcript: {
+    status: TranscriptReviewStatus;
+    hasCanonicalTranscript: boolean;
+    language: string | null;
+  };
 }
 
 export interface OpportunityDetail extends Opportunity {

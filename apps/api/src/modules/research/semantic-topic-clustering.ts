@@ -1,9 +1,33 @@
 import { createHash } from 'node:crypto';
 
 export const RETRIEVAL_TOP_K = 8;
+
+/**
+ * Batch semantic clustering keeps its existing conservative retrieval threshold.
+ */
 export const RETRIEVAL_MIN_SIMILARITY = 0.7;
-// Conservative fixture-calibrated admission; embeddings only retrieve candidates.
+
+/**
+ * Incremental Topic assignment needs broader multilingual recall.
+ * Real Qwen3 calibration:
+ * Hindi ↔ English Javelin titles measured around 0.48–0.51.
+ */
+export const INCREMENTAL_RETRIEVAL_MIN_SIMILARITY = 0.45;
+
+/**
+ * Existing batch-clustering admission threshold.
+ * Do not change this as part of incremental Topic assignment.
+ */
 export const RERANK_ADMISSION_SCORE = 0.15;
+
+/**
+ * Incremental BGE admission calibrated against the local
+ * bge-reranker-v2-m3 runtime.
+ *
+ * Relevant cross-language Javelin candidates: roughly -5 to -6.
+ * Clearly unrelated Rafale / earthquake candidates: roughly -10 to -11.
+ */
+export const INCREMENTAL_RERANK_ADMISSION_SCORE = -6.5;
 /** Safety bound for local BGE confirmation work in one detection run. */
 export const RERANK_REQUEST_BUDGET = 48;
 export const DEFAULT_SEMANTIC_EMBEDDING_BATCH_SIZE = 64;

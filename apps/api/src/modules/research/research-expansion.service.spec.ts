@@ -8,6 +8,7 @@ jest.mock('@content-os/contracts', () => ({
 }));
 
 import { ResearchExpansionService } from './research-expansion.service';
+import { ExternalResearchSearchError } from './external-research-discovery.types';
 
 const opportunity = { id: 'topic-1', projectId: 'project-1' };
 const verification = (status: string, sourceIds: string[] = ['source-a']) => ({ verificationStatus: status, evidenceSignalCount: sourceIds.length, distinctSourceCount: new Set(sourceIds).size, independentSourceCount: new Set(sourceIds).size, candidateClaimCount: 1, contradictionCount: 0, verificationReasons: [], canProceedAutomatically: status === 'corroborated' });
@@ -124,6 +125,35 @@ describe('ResearchExpansionService', () => {
     expect(result.warnings[0]).toContain('insufficient deterministic identity');
     expect(ingestion.ingest).not.toHaveBeenCalled();
     expect(expansions.upsert).not.toHaveBeenCalled();
+  });
+
+  it('uses the existing candidate identity when a weak package has no extracted facts', async () => {
+    packages.findOne.mockResolvedValue({ ...detail('insufficient'), facts: [] });
+    const result = await service.expand('topic-1');
+    expect(ingestion.ingest).toHaveBeenCalledWith('source-b');
+    expect(result.sourcesSearched).toBe(1);
+  });
+
+  it('uses a candidate topic identity for discovery without promoting headline framing to a fact', async () => {
+    packages.findOne.mockResolvedValue({ ...detail('insufficient'), facts: [] });
+    evidence.resolveOpportunityEvidence.mockResolvedValue({ kind: 'candidate', candidates: [{ candidateText: 'Hormuz becomes a bargaining chip', signal: { id: 'signal-a', researchSourceId: 'source-a' } }], signals: [{ id: 'signal-a', researchSourceId: 'source-a' }] });
+    await service.expand('topic-1');
+    expect(ingestion.ingest).toHaveBeenCalledWith('source-b');
+  });
+
+  it('does not use editorial headline framing as an external discovery query', async () => {
+    packages.findOne.mockResolvedValue({
+      ...detail(),
+      facts: [{ claim: 'Hormuz Become Iran Big Bargaining Chip' }],
+    });
+    evidence.resolveOpportunityEvidence.mockResolvedValue({ kind: 'legacy', signals: [] });
+
+    const result = await service.expand('topic-1');
+
+    expect(result).toMatchObject({ status: 'exhausted' });
+    expect(result.warnings[0]).toContain('insufficient deterministic identity');
+    expect(ingestion.ingest).not.toHaveBeenCalled();
+    expect(externalDiscovery.discover).not.toHaveBeenCalled();
   });
 
   it('accepts only an exact candidate claim from a distinct source then re-verifies', async () => {
@@ -270,6 +300,25 @@ describe('ResearchExpansionService', () => {
     );
 
     expect(result.status).toBe('expanded');
+  });
+
+  it('records an exhausted attempt when external discovery is unavailable instead of throwing', async () => {
+    signals.findAll.mockResolvedValue([]);
+    externalDiscovery.discover.mockRejectedValue(new Error('transport unavailable'));
+    const result = await service.expand('topic-1');
+    expect(result).toMatchObject({ status: 'exhausted', providerFailures: 1 });
+    expect(result.warnings).toContain('External discovery could not be reached for this bounded expansion attempt (transport_unavailable).');
+    expect(expansions.upsert).toHaveBeenCalled();
+  });
+
+  it('preserves a safe local network-permission diagnostic without provider output', async () => {
+    signals.findAll.mockResolvedValue([]);
+    externalDiscovery.discover.mockRejectedValue(new ExternalResearchSearchError('local_network_permission_denied'));
+
+    const result = await service.expand('topic-1');
+
+    expect(result.warnings).toContain('External discovery could not be reached for this bounded expansion attempt (local_network_permission_denied).');
+    expect(result.warnings.join(' ')).not.toContain('WinError');
   });
 
   it('rejects unrelated sibling candidates when semantic matching does not confirm them', async () => {

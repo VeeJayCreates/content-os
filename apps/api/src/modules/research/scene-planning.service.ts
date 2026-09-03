@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 
 import { ConflictException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
-import { AiExecutionMode, AiTask, SceneMediaStrategy, ScenePlanStatus, SceneType } from '@content-os/contracts';
+import { AiExecutionMode, AiTask, SceneMediaStrategy, ScenePlanStatus, SceneType, type GeographicEntity } from '@content-os/contracts';
 import { ContentScriptRepository, ScenePlanRepository, type PlannedSceneWrite } from '@content-os/storage';
 
 import { AiRuntime } from '../ai/ai-runtime.service';
@@ -9,11 +9,11 @@ import { AiRuntimeProviderError } from '../ai/ai-runtime.types';
 
 export const SCENE_PLAN_VERSION = 'scene-plan-v1';
 export const SCENE_PLANNING_PROMPT_VERSION = 'scene-planning-v1';
-export const SCENE_PLANNING_SYSTEM_PROMPT = `Create visual enrichment for the supplied ordered narration segments. Return JSON only: {"scenes":[{"id":"exact supplied id","index":0,"narration":"exact supplied narration","sceneType":"presenter|b_roll|map|animation|image|generated_video|screen_demo|chart_or_screenshot|text","mediaStrategy":"reusable_asset|existing_asset|stock_or_source_footage|programmatic_animation|reusable_map_animation|ai_image|ai_image_to_video|generated_video|screen_capture|presenter|text_only|manual","visualDescription":"short grounded visual direction","primarySearchQuery":"optional string or null","alternateSearchQueries":["optional string"],"generatedMediaPrompt":"optional string or null","onScreenText":"optional string or null","subtitleText":"exact supplied narration","citedFactIds":["only supplied fact ids"],"transitionRecommendation":"optional string or null","continuityNotes":"optional string or null","manualReview":false,"manualReviewReason":"optional string or null"}]}. Preserve every supplied scene id, index, and narration exactly. Do not rewrite, add, remove, reorder, merge, or split narration. Use only supplied fact IDs. Do not invent facts or citations. Do not include hidden reasoning.`;
+export const SCENE_PLANNING_SYSTEM_PROMPT = `Create visual enrichment for the supplied ordered narration segments. Return JSON only: {"scenes":[{"id":"exact supplied id","index":0,"narration":"exact supplied narration","sceneType":"presenter|b_roll|map|animation|image|generated_video|screen_demo|chart_or_screenshot|text","mediaStrategy":"reusable_asset|existing_asset|stock_or_source_footage|programmatic_animation|reusable_map_animation|ai_image|ai_image_to_video|generated_video|screen_capture|presenter|text_only|manual","visualDescription":"short grounded visual direction","primarySearchQuery":"optional string or null","alternateSearchQueries":["optional string"],"generatedMediaPrompt":"optional string or null","onScreenText":"optional string or null","subtitleText":"exact supplied narration","citedFactIds":["only supplied fact ids"],"geographicEntityIds":["only supplied geographic entity ids"],"transitionRecommendation":"optional string or null","continuityNotes":"optional string or null","manualReview":false,"manualReviewReason":"optional string or null"}]}. Preserve every supplied scene id, index, and narration exactly. Do not rewrite, add, remove, reorder, merge, or split narration. Use only supplied fact IDs and supplied geographic entity IDs. Do not invent facts, citations, geographic entities, or coordinates. Do not include hidden reasoning.`;
 
 export type NarrationSegment = { id: string; narration: string; narrationWordCount: number; estimatedDurationMs: number; startEstimateMs: number; endEstimateMs: number };
 type ProviderScene = Omit<PlannedSceneWrite, 'id' | 'narrationWordCount' | 'estimatedDurationMs' | 'startEstimateMs' | 'endEstimateMs'> & { id: string; index: number; narration: string };
-export type PreparedScenePlan = { contentScriptId: string; projectId: string; inputHash: string; segments: NarrationSegment[]; factIds: string[]; language: string; cached: Awaited<ReturnType<ScenePlanRepository['findByContentScriptId']>> | null };
+export type PreparedScenePlan = { contentScriptId: string; projectId: string; inputHash: string; segments: NarrationSegment[]; factIds: string[]; geographicEntities: GeographicEntity[]; language: string; cached: Awaited<ReturnType<ScenePlanRepository['findByContentScriptId']>> | null };
 
 const normalize = (value: string) => value.replace(/\s+/g, ' ').trim();
 const words = (value: string) => normalize(value).split(' ').filter(Boolean);
@@ -97,21 +97,22 @@ export class ScenePlanningService {
     const script = await this.requireReadyScript(contentScriptId);
     const segments = segmentNarration(script.fullScript, script.id);
     this.assertReconciliation(script.fullScript, segments);
-    const inputHash = this.inputHash(script.inputHash, segments);
+    const geographicEntities = Array.isArray(script.geographicEntities) ? script.geographicEntities as GeographicEntity[] : [];
+    const inputHash = this.inputHash(script.inputHash, segments, geographicEntities);
     const current = await this.plans.findByContentScriptId(contentScriptId);
-    return { contentScriptId, projectId: script.projectId, inputHash, segments, factIds: script.citedFactIds, language: script.language, cached: current?.status === ScenePlanStatus.READY && current.inputHash === inputHash ? current : null };
+    return { contentScriptId, projectId: script.projectId, inputHash, segments, factIds: script.citedFactIds, geographicEntities, language: script.language, cached: current?.status === ScenePlanStatus.READY && current.inputHash === inputHash ? current : null };
   }
 
   runtimeInput(prepared: PreparedScenePlan) {
-    return { contentScriptId: prepared.contentScriptId, language: prepared.language, segments: prepared.segments.map((segment) => ({ ...segment, citedFactIds: prepared.factIds })), factIds: prepared.factIds };
+    return { contentScriptId: prepared.contentScriptId, language: prepared.language, segments: prepared.segments.map((segment) => ({ ...segment, citedFactIds: prepared.factIds })), factIds: prepared.factIds, geographicEntities: prepared.geographicEntities };
   }
 
   async persistPrepared(prepared: PreparedScenePlan, output: unknown, executionMode: AiExecutionMode) {
     const script = await this.requireReadyScript(prepared.contentScriptId);
-    const currentHash = this.inputHash(script.inputHash, prepared.segments);
+    const currentHash = this.inputHash(script.inputHash, prepared.segments, prepared.geographicEntities);
     if (currentHash !== prepared.inputHash) throw new ConflictException('Content Package input changed before Scene Plan completion');
     const route = this.runtime.route(AiTask.SCENE_PLANNING);
-    const scenes = this.validateOutput(output, prepared.segments, new Set(prepared.factIds));
+    const scenes = this.validateOutput(output, prepared.segments, new Set(prepared.factIds), new Set(prepared.geographicEntities.map((entity) => entity.id)));
     return this.plans.upsert(this.planWrite(script, prepared.inputHash, route.provider, route.model, executionMode, ScenePlanStatus.READY, prepared.segments), scenes);
   }
 
@@ -128,15 +129,15 @@ export class ScenePlanningService {
     return script;
   }
 
-  private inputHash(scriptInputHash: string, segments: NarrationSegment[]) {
-    return createHash('sha256').update(JSON.stringify({ scriptInputHash, version: SCENE_PLAN_VERSION, promptVersion: SCENE_PLANNING_PROMPT_VERSION, segments: segments.map(({ id, narration }) => ({ id, narration })) })).digest('hex');
+  private inputHash(scriptInputHash: string, segments: NarrationSegment[], geographicEntities: GeographicEntity[] = []) {
+    return createHash('sha256').update(JSON.stringify({ scriptInputHash, version: SCENE_PLAN_VERSION, promptVersion: SCENE_PLANNING_PROMPT_VERSION, segments: segments.map(({ id, narration }) => ({ id, narration })), geographicEntities })).digest('hex');
   }
 
   private assertReconciliation(script: string, segments: NarrationSegment[]) {
     if (normalize(segments.map((segment) => segment.narration).join(' ')) !== normalize(script)) throw new ConflictException('Narration reconciliation failed');
   }
 
-  private validateOutput(value: unknown, segments: NarrationSegment[], allowedFactIds: Set<string>): PlannedSceneWrite[] {
+  private validateOutput(value: unknown, segments: NarrationSegment[], allowedFactIds: Set<string>, allowedGeographicEntityIds = new Set<string>()): PlannedSceneWrite[] {
     if (!value || typeof value !== 'object' || !Array.isArray(Reflect.get(value, 'scenes'))) throw new ConflictException('Scene Plan output is invalid');
     const output = Reflect.get(value, 'scenes') as unknown[];
     if (output.length !== segments.length) throw new ConflictException('Scene Plan output does not match narration segments');
@@ -150,10 +151,12 @@ export class ScenePlanningService {
       const visualDescription = this.text(get('visualDescription'), 1_000, 'Scene Plan output is invalid');
       const citedFactIds = this.stringList(get('citedFactIds'), 30, 100);
       if (citedFactIds.some((factId) => !allowedFactIds.has(factId))) throw new ConflictException('Scene Plan cites unsupported facts');
+      const geographicEntityIds = this.stringList(get('geographicEntityIds') ?? [], 12, 100);
+      if (geographicEntityIds.some((id) => !allowedGeographicEntityIds.has(id))) throw new ConflictException('Scene Plan selects unsupported geographic entities');
       return {
         id: segment.id, narration: segment.narration, narrationWordCount: segment.narrationWordCount, estimatedDurationMs: segment.estimatedDurationMs, startEstimateMs: segment.startEstimateMs, endEstimateMs: segment.endEstimateMs,
         sceneType, mediaStrategy, visualDescription, primarySearchQuery: this.optionalText(get('primarySearchQuery'), 300), alternateSearchQueries: this.stringList(get('alternateSearchQueries'), 5, 300),
-        generatedMediaPrompt: this.optionalText(get('generatedMediaPrompt'), 1_000), onScreenText: this.optionalText(get('onScreenText'), 300), subtitleText: segment.narration, citedFactIds,
+        generatedMediaPrompt: this.optionalText(get('generatedMediaPrompt'), 1_000), onScreenText: this.optionalText(get('onScreenText'), 300), subtitleText: segment.narration, citedFactIds, geographicEntityIds,
         transitionRecommendation: this.optionalText(get('transitionRecommendation'), 200), continuityNotes: this.optionalText(get('continuityNotes'), 500), manualReview: typeof get('manualReview') === 'boolean' ? get('manualReview') : false,
         manualReviewReason: this.optionalText(get('manualReviewReason'), 300),
       };

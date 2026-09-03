@@ -64,12 +64,14 @@ export async function runVideoRenderSequence<T>(
   api: {
     prepareComposition(id: string): Promise<unknown>;
     bindAssets(id: string): Promise<unknown>;
+    prepareMotionPlan(id: string): Promise<unknown>;
     prepareInput(id: string): Promise<unknown>;
     enqueue(id: string): Promise<T>;
   },
 ) {
   await api.prepareComposition(contentScriptId);
   await api.bindAssets(contentScriptId);
+  await api.prepareMotionPlan(contentScriptId);
   await api.prepareInput(contentScriptId);
   return api.enqueue(contentScriptId);
 }

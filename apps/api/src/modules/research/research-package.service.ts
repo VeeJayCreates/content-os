@@ -3,7 +3,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ResearchLifecycleState, TopicSelectionDecision } from '@content-os/contracts';
 import type {
   ResearchEvidence,
   ResearchFact,
@@ -19,6 +21,7 @@ import {
   ResearchPackageRepository,
   ResearchPackageWithContext,
 } from '@content-os/storage';
+import { GeographicEntityEnrichmentService } from './geographic-entity-enrichment.service';
 
 import {
   factStatusForSources,
@@ -32,6 +35,8 @@ import {
   type ResolvedOpportunityEvidence,
 } from './opportunity-evidence.service';
 import { evaluateResearchVerification } from './research-verification';
+import { TopicSelectionService } from './topic-selection.service';
+import { ResearchExecutionLogger } from './research-execution-logger.service';
 
 @Injectable()
 export class ResearchPackageService {
@@ -41,11 +46,14 @@ export class ResearchPackageService {
     private readonly opportunities: OpportunityRepository,
     private readonly packages: ResearchPackageRepository,
     private readonly evidence: OpportunityEvidenceService,
+    private readonly geographicEntities?: GeographicEntityEnrichmentService,
+    @Optional() private readonly topicSelections?: TopicSelectionService,
+    @Optional() private readonly executionLog?: ResearchExecutionLogger,
   ) {}
 
-  async generate(
-    opportunityId: string,
-  ): Promise<ResearchPackageGenerationResult> {
+  async generate(opportunityId: string): Promise<ResearchPackageGenerationResult> {
+    const startedAt = Date.now();
+    this.executionLog?.withContext({ opportunityId }, () => this.executionLog?.event('info', 'research_package.generation.started', 'started'));
     const opportunity = await this.opportunities.findById(opportunityId);
     if (!opportunity) throw new NotFoundException('Opportunity not found');
 
@@ -56,6 +64,7 @@ export class ResearchPackageService {
       );
     } catch (error) {
       if (error instanceof OpportunityEvidenceResolutionError) {
+        this.executionLog?.withContext({ opportunityId }, () => this.executionLog?.event('warn', 'research_package.evidence_resolution', 'failed', { result: { category: error.category } }));
         this.logger.warn(
           JSON.stringify({
             stage: 'research_package.evidence_resolution_failed',
@@ -74,14 +83,10 @@ export class ResearchPackageService {
     const sourceCount = new Set(
       signals.map((signal) => signal.researchSourceId),
     ).size;
-    const candidateClaimCount =
-      resolvedEvidence.kind === 'candidate'
-        ? new Set(
-            resolvedEvidence.candidates.map((candidate) =>
-              normalizeClaimKey(candidate.candidateText),
-            ),
-          ).size
-        : 1;
+    this.executionLog?.withContext({ opportunityId, projectId: opportunity.projectId }, () => this.executionLog?.event('debug', 'research_package.evidence.resolved', 'completed', { result: { evidenceKind: resolvedEvidence.kind, signalCount: signals.length, sourceCount } }));
+    const candidateClaimCount = resolvedEvidence.kind === 'candidate'
+      ? new Set(resolvedEvidence.candidates.map((candidate) => normalizeClaimKey(candidate.candidateText))).size
+      : 1;
     const verification = evaluateResearchVerification({
       signals: signals.map((signal) => ({
         signalId: signal.id,
@@ -102,10 +107,12 @@ export class ResearchPackageService {
       confidenceScore,
       sourceCount,
       signalCount: signals.length,
+      lifecycleState: ResearchLifecycleState.RESEARCHING,
     } as const;
 
     let researchPackage =
       await this.packages.findByOpportunityId(opportunityId);
+    const reusedResearchPackage = Boolean(researchPackage);
     if (researchPackage) {
       researchPackage = (await this.packages.update(
         researchPackage.id,
@@ -121,25 +128,16 @@ export class ResearchPackageService {
 
     let factsCreated = 0;
     let factsUpdated = 0;
+    let finalVerification = verification;
     if (resolvedEvidence.kind === 'candidate') {
-      const facts = new Map<
-        string,
-        { claim: string; normalizedClaimKey: string; signalIds: string[] }
-      >();
-
-      const candidateSignalIds = new Set(
-        resolvedEvidence.candidates.map((candidate) => candidate.signal.id),
-      );
-
+      const facts = new Map<string, { claim: string; normalizedClaimKey: string; signalIds: string[] }>();
       const signalSourceById = new Map(
         signals.map((signal) => [signal.id, signal.researchSourceId]),
       );
-
-      // Candidate-backed facts retain only their actual candidate evidence.
+      const candidateSignalIds = new Set(resolvedEvidence.candidates.map((candidate) => candidate.signal.id));
       for (const candidate of resolvedEvidence.candidates) {
         const normalizedClaimKey = normalizeClaimKey(candidate.candidateText);
         const existing = facts.get(normalizedClaimKey);
-
         if (existing) {
           existing.signalIds.push(candidate.signal.id);
         } else {
@@ -150,30 +148,13 @@ export class ResearchPackageService {
           });
         }
       }
-
-      // Signals inherited from the legacy opportunity path support the original
-      // opportunity claim. Do not attach them indiscriminately to candidate facts.
-      const legacySignals = signals.filter(
-        (signal) => !candidateSignalIds.has(signal.id),
-      );
-
+      const legacySignals = signals.filter((signal) => !candidateSignalIds.has(signal.id));
       if (legacySignals.length > 0) {
         const normalizedOpportunityKey = normalizeClaimKey(opportunity.title);
         const existing = facts.get(normalizedOpportunityKey);
-
-        if (existing) {
-          existing.signalIds.push(
-            ...legacySignals.map((signal) => signal.id),
-          );
-        } else {
-          facts.set(normalizedOpportunityKey, {
-            claim: opportunity.title,
-            normalizedClaimKey: normalizedOpportunityKey,
-            signalIds: legacySignals.map((signal) => signal.id),
-          });
-        }
+        if (existing) existing.signalIds.push(...legacySignals.map((signal) => signal.id));
+        else facts.set(normalizedOpportunityKey, { claim: opportunity.title, normalizedClaimKey: normalizedOpportunityKey, signalIds: legacySignals.map((signal) => signal.id) });
       }
-
       const replacements = [...facts.values()].map((fact) => {
         const factSourceCount = new Set(
           fact.signalIds
@@ -193,6 +174,24 @@ export class ResearchPackageService {
         researchPackage.id,
         replacements,
       );
+      await this.enrichPackageFacts(researchPackage.id);
+
+      finalVerification = evaluateResearchVerification({
+        signals: signals.map((signal) => ({ signalId: signal.id, researchSourceId: signal.researchSourceId })),
+        candidateClaimCount,
+        facts: replacements.map((fact) => ({ status: fact.status })),
+      });
+      const potential = finalVerification.canProceedAutomatically && this.topicSelections
+        ? await this.topicSelections.evaluateOne(opportunityId)
+        : null;
+      const lifecycleUpdated = await this.packages.update(researchPackage.id, {
+        lifecycleState: !finalVerification.canProceedAutomatically
+          ? ResearchLifecycleState.NEEDS_MORE_EVIDENCE
+          : potential?.decision === TopicSelectionDecision.SELECTED
+            ? ResearchLifecycleState.REVIEW_READY
+            : ResearchLifecycleState.CORROBORATED,
+      });
+      if (lifecycleUpdated) researchPackage = lifecycleUpdated;
 
       if (replacement.previousFactCount > 0) {
         factsUpdated = replacements.length;
@@ -200,22 +199,24 @@ export class ResearchPackageService {
         factsCreated = replacements.length;
       }
     } else {
-      const fact = {
-        claim: opportunity.title,
-        signalIds: signals.map((signal) => signal.id),
-      };
       const factResult = await this.packages.upsertFact({
         researchPackageId: researchPackage.id,
-        claim: fact.claim,
-        normalizedClaimKey: normalizeClaimKey(fact.claim),
+        claim: opportunity.title,
+        normalizedClaimKey: normalizeClaimKey(opportunity.title),
         confidence: confidenceScore,
         status: factStatusForSources(sourceCount),
       });
       if (factResult.created) factsCreated += 1;
       else factsUpdated += 1;
-      for (const signalId of fact.signalIds)
-        await this.packages.attachEvidence(factResult.fact.id, signalId);
+      for (const signal of signals) await this.packages.attachEvidence(factResult.fact.id, signal.id);
+      await this.enrichPackageFacts(researchPackage.id);
+      finalVerification = evaluateResearchVerification({
+        signals: signals.map((signal) => ({ signalId: signal.id, researchSourceId: signal.researchSourceId })),
+        candidateClaimCount,
+        facts: [{ status: factResult.fact.status }],
+      });
     }
+    this.executionLog?.withContext({ opportunityId, projectId: opportunity.projectId, researchPackageId: researchPackage.id }, () => this.executionLog?.event('info', 'research_package.persistence.completed', 'completed', { result: { reused: reusedResearchPackage, status: researchPackage.status, confidenceScore, sourceCount, signalCount: signals.length, factsCreated, factsUpdated, verificationStatus: finalVerification.verificationStatus, canProceedAutomatically: finalVerification.canProceedAutomatically, lifecycleState: researchPackage.lifecycleState }, durationMs: Date.now() - startedAt }));
 
     return {
       packageId: researchPackage.id,
@@ -224,12 +225,25 @@ export class ResearchPackageService {
       factsCreated,
       factsUpdated,
       confidenceScore,
-      verification,
-      warnings:
-        sourceCount < 2
+      verification: finalVerification,
+      warnings: sourceCount < 2
           ? ['Only one independent source supports this package.']
           : [],
     };
+  }
+
+  private async enrichPackageFacts(researchPackageId: string) {
+    if (!this.geographicEntities) return;
+    const rows = (await this.packages.findFactsWithEvidenceByPackageIds([researchPackageId])).get(researchPackageId) ?? [];
+    for (const [factId, factRows] of new Map([...rows.reduce((groups, row) => groups.set(row.id, [...(groups.get(row.id) ?? []), row]), new Map<string, ResearchFactWithEvidence[]>())]).entries()) {
+      const fact = factRows[0]; if (!fact) continue;
+      await this.enrichOneFact(fact, factRows.map((row) => row.signalId).filter((id): id is string => Boolean(id)));
+    }
+  }
+
+  private async enrichOneFact(fact: { id: string; claim: string; status: string }, signalIds: string[]) {
+    if (!this.geographicEntities) return;
+    await this.packages.setFactGeographicEntities(fact.id, await this.geographicEntities.enrich(fact, signalIds));
   }
 
   async findAll(projectId?: string): Promise<ResearchPackage[]> {
@@ -254,6 +268,20 @@ export class ResearchPackageService {
     };
   }
 
+  async review(id: string, decision: 'approved' | 'rejected'): Promise<ResearchPackage> {
+    const existing = await this.packages.findById(id);
+    if (!existing) throw new NotFoundException('Research package not found');
+    if (existing.lifecycleState !== ResearchLifecycleState.REVIEW_READY) {
+      throw new ConflictException('Only review-ready research packages can be reviewed');
+    }
+    const lifecycleState = decision === 'approved'
+      ? ResearchLifecycleState.APPROVED
+      : ResearchLifecycleState.REJECTED;
+    const updated = await this.packages.update(id, { lifecycleState });
+    if (!updated) throw new NotFoundException('Research package not found');
+    return this.toPackage(updated);
+  }
+
   private toPackage(record: ResearchPackageWithContext): ResearchPackage {
     return {
       id: record.id,
@@ -264,6 +292,7 @@ export class ResearchPackageService {
       title: record.title,
       summary: record.summary,
       status: record.status as ResearchPackageStatus,
+      lifecycleState: record.lifecycleState as ResearchLifecycleState,
       confidenceScore: record.confidenceScore,
       sourceCount: record.sourceCount,
       signalCount: record.signalCount,
@@ -285,6 +314,7 @@ export class ResearchPackageService {
           claim: row.claim,
           confidence: row.confidence,
           status: row.status as ResearchFact['status'],
+          geographicEntities: Array.isArray(row.geographicEntities) ? row.geographicEntities as ResearchFact['geographicEntities'] : [],
           evidence: [],
           createdAt: row.createdAt,
         };
@@ -315,9 +345,7 @@ export class ResearchPackageService {
     return { facts: [...facts.values()], signals: [...signals.values()] };
   }
 
-  private verificationFor(
-    detail: Pick<ResearchPackageDetail, 'facts' | 'signals'>,
-  ): ResearchVerification {
+  private verificationFor(detail: Pick<ResearchPackageDetail, 'facts' | 'signals'>): ResearchVerification {
     return evaluateResearchVerification({
       signals: detail.signals.map((signal) => ({
         signalId: signal.signalId,

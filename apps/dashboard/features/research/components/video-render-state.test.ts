@@ -67,6 +67,7 @@ test("runs prerequisites in order and stops at the first failure", async () => {
   await assert.rejects(runVideoRenderSequence("script-1", {
     prepareComposition: async () => void calls.push("composition"),
     bindAssets: async () => { calls.push("assets"); throw new Error("binding failed"); },
+    prepareMotionPlan: async () => void calls.push("motion"),
     prepareInput: async () => void calls.push("input"),
     enqueue: async () => { calls.push("enqueue"); return job(VideoRenderJobStatus.QUEUED); },
   }), /binding failed/);
@@ -78,8 +79,9 @@ test("enqueues once after every prerequisite succeeds", async () => {
   await runVideoRenderSequence("script-1", {
     prepareComposition: async () => void calls.push("composition"),
     bindAssets: async () => void calls.push("assets"),
+    prepareMotionPlan: async () => void calls.push("motion"),
     prepareInput: async () => void calls.push("input"),
     enqueue: async () => { calls.push("enqueue"); return job(VideoRenderJobStatus.QUEUED); },
   });
-  assert.deepEqual(calls, ["composition", "assets", "input", "enqueue"]);
+  assert.deepEqual(calls, ["composition", "assets", "motion", "input", "enqueue"]);
 });

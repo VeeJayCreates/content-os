@@ -1,0 +1,9 @@
+{
+  "source": { "id": "natural-earth", "version": "5.1.2", "license": "Natural Earth public-domain data; records reviewed for ContentOS V1." },
+  "references": [
+    { "id": "natural-earth:5.1.2:country:ir", "canonicalName": "Iran", "aliases": [], "entityType": "country", "bounds": { "west": 44.109225, "south": 25.078237, "east": 63.316632, "north": 39.713003 }, "geometryReference": "natural-earth:5.1.2:1159320881", "provenanceSourceId": "natural-earth", "provenanceReference": "ne_110m_admin_0_countries", "confidence": 100, "reviewStatus": "ready", "version": "5.1.2", "revision": 1 },
+    { "id": "natural-earth:5.1.2:country:om", "canonicalName": "Oman", "aliases": [], "entityType": "country", "bounds": { "west": 52.00001, "south": 16.651051, "east": 59.80806, "north": 26.395934 }, "geometryReference": "natural-earth:5.1.2:1159321151", "provenanceSourceId": "natural-earth", "provenanceReference": "ne_110m_admin_0_countries", "confidence": 100, "reviewStatus": "ready", "version": "5.1.2", "revision": 1 },
+    { "id": "geonames:287878:strait-of-hormuz", "canonicalName": "Strait of Hormuz", "aliases": ["Bab-e Hormoz", "Bab-e-Hormuz", "Bab-i-Hormuz", "Bughaz Hormuz"], "entityType": "strait", "point": { "latitude": 26.56667, "longitude": 56.25 }, "geometryReference": "geonames:287878", "provenanceSourceId": "geonames", "provenanceReference": "287878", "confidence": 95, "reviewStatus": "ready", "version": "v1", "revision": 1 }
+  ],
+  "relationships": []
+}

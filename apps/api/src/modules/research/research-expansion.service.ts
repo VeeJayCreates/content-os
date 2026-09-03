@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { SemanticTopicClusteringService } from './semantic-topic-clustering.service';
 import { ExternalResearchDiscoveryService } from './external-research-discovery.service';
+import { ExternalResearchSearchError } from './external-research-discovery.types';
 import {
   ResearchSourceRole,
   ResearchSourceType,
@@ -22,8 +23,9 @@ import { IngestionService } from './ingestion.service';
 import { ResearchPackageService } from './research-package.service';
 import { OpportunityEvidenceService } from './opportunity-evidence.service';
 import { extractTopicCandidates } from './topic-candidate-extraction';
-import { normalizeClaimKey } from './research-package';
+import { isVerifiableResearchClaim, normalizeClaimKey } from './research-package';
 import { evaluateResearchVerification } from './research-verification';
+import { ResearchExecutionLogger } from './research-execution-logger.service';
 
 const MAX_ATTEMPTS = 2;
 const MAX_SOURCES_PER_ATTEMPT = 6;
@@ -48,6 +50,7 @@ export class ResearchExpansionService {
     private readonly evidence: OpportunityEvidenceService,
     private readonly semanticClustering: SemanticTopicClusteringService,
     private readonly externalDiscovery: ExternalResearchDiscoveryService,
+    @Optional() private readonly executionLog?: ResearchExecutionLogger,
   ) {}
 
   private async findSemanticMatches(
@@ -101,17 +104,20 @@ export class ResearchExpansionService {
     const startedAt = Date.now();
     const opportunity = await this.opportunities.findById(opportunityId);
     if (!opportunity) throw new NotFoundException('Opportunity not found');
+    this.executionLog?.withContext({ projectId: opportunity.projectId, opportunityId }, () => this.executionLog?.event('info', 'research_expansion.started', 'started'));
 
     const context = await this.initialContext(opportunityId, opportunity.title);
     let current = context.researchPackage;
     const initial = context.verification;
     if (initial.verificationStatus === ResearchVerificationStatus.CORROBORATED || initial.verificationStatus === ResearchVerificationStatus.CONFLICTING) {
+      this.executionLog?.withContext({ projectId: opportunity.projectId, opportunityId }, () => this.executionLog?.event('info', 'research_expansion.initial_verification', 'skipped', { result: { verificationStatus: initial.verificationStatus, reasonCode: 'terminal_verification_state' } }));
       return this.result(opportunityId, 'skipped', initial, startedAt, { warnings: [`Topic is already ${initial.verificationStatus}.`] });
     }
 
     const existingSourceIds = context.existingSourceIds;
     const claims = context.claims;
     if (!claims.length) {
+      this.executionLog?.withContext({ projectId: opportunity.projectId, opportunityId }, () => this.executionLog?.event('warn', 'research_expansion.claims', 'exhausted', { result: { claimCount: 0, reasonCode: 'no_deterministic_claim_identity' } }));
       return this.result(opportunityId, 'exhausted', initial, startedAt, {
         warnings: ['Topic has insufficient deterministic identity for research expansion.'],
       });
@@ -127,8 +133,10 @@ export class ResearchExpansionService {
       .filter((source) => !existingSourceIds.has(source.id))
       .slice(0, MAX_SOURCES_PER_ATTEMPT);
     const inputHash = hash({ claims, sources: sources.map((source) => source.id) });
+    this.executionLog?.withContext({ projectId: opportunity.projectId, opportunityId }, () => this.executionLog?.event('debug', 'research_expansion.plan', 'completed', { result: { claimCount: claims.length, sourceIds: sources.map((source) => source.id), inputHash, existingSourceCount: existingSourceIds.size } }));
     const state = await this.expansions.findByOpportunityId(opportunityId);
     if (state?.inputHash === inputHash && state.attemptCount >= MAX_ATTEMPTS) {
+      this.executionLog?.withContext({ projectId: opportunity.projectId, opportunityId }, () => this.executionLog?.event('info', 'research_expansion.attempt_limit', 'skipped', { result: { inputHash, attemptCount: state.attemptCount, maxAttempts: MAX_ATTEMPTS } }));
       return this.result(opportunityId, 'exhausted', initial, startedAt, { queriesPlanned: claims.length, queriesSkipped: claims.length, warnings: ['Expansion attempts are exhausted for unchanged topic evidence.'] });
     }
 
@@ -139,6 +147,7 @@ export class ResearchExpansionService {
     const warnings: string[] = [];
     for (const source of sources) {
       try {
+        this.executionLog?.withContext({ projectId: opportunity.projectId, opportunityId, sourceId: source.id }, () => this.executionLog?.event('debug', 'research_expansion.source_refresh', 'started', { result: { sourceName: source.name, sourceType: source.sourceType } }));
         const ingestion = await this.ingestion.ingest(source.id);
         signalsDiscovered += ingestion.createdCount;
         const sourceSignals = await this.signals.findAll(opportunity.projectId, source.id);
@@ -184,23 +193,37 @@ export class ResearchExpansionService {
               )
             ) {
               accepted += 1;
+              this.executionLog?.withContext({ projectId: opportunity.projectId, opportunityId, sourceId: source.id, signalId: signal.id, topicCandidateId: stored.id }, () => this.executionLog?.event('debug', 'research_expansion.candidate_attachment', 'accepted', { result: { matchType: exactMatches.includes(candidate) ? 'exact' : 'semantic' } }));
             } else {
               duplicates += 1;
+              this.executionLog?.withContext({ projectId: opportunity.projectId, opportunityId, sourceId: source.id, signalId: signal.id, topicCandidateId: stored.id }, () => this.executionLog?.event('debug', 'research_expansion.candidate_attachment', 'rejected', { result: { reasonCode: 'already_attached' } }));
             }
           }
         }
-      } catch {
+      } catch (error) {
         providerFailures += 1;
+        this.executionLog?.withContext({ projectId: opportunity.projectId, opportunityId, sourceId: source.id }, () => this.executionLog?.event('warn', 'research_expansion.source_refresh', 'failed', { result: { failureCategory: safeErrorCategory(error) } }));
         warnings.push(`Configured source '${source.name}' could not be refreshed.`);
       }
     }
     if (accepted === 0) {
-      const discovery = await this.externalDiscovery.discover({
-        projectId: opportunity.projectId,
-        queries: claims.slice(0, 3),
-      });
+      let discovery: Awaited<ReturnType<ExternalResearchDiscoveryService['discover']>> | null = null;
+      try {
+        this.executionLog?.withContext({ projectId: opportunity.projectId, opportunityId }, () => this.executionLog?.event('info', 'research_expansion.external_discovery', 'started', { result: { queryCount: Math.min(3, claims.length), inputHash } }));
+        discovery = await this.externalDiscovery.discover({
+          projectId: opportunity.projectId,
+          queries: claims.slice(0, 3),
+        });
+      } catch (error) {
+        providerFailures += 1;
+        const category = error instanceof ExternalResearchSearchError
+          ? error.category
+          : 'transport_unavailable';
+        warnings.push(`External discovery could not be reached for this bounded expansion attempt (${category}).`);
+        this.executionLog?.withContext({ projectId: opportunity.projectId, opportunityId }, () => this.executionLog?.event('warn', 'research_expansion.external_discovery', 'failed', { result: { failureCategory: category } }));
+      }
 
-      if (discovery.acceptedResults > 0) {
+      if (discovery?.acceptedResults && discovery.acceptedResults > 0) {
         const discoveredSignals = await this.signals.findAll(opportunity.projectId);
 
         const discoveredByUrl = new Map(
@@ -270,7 +293,7 @@ export class ResearchExpansionService {
       lastStatus: status,
       lastRunAt: new Date().toISOString(),
     });
-    return this.result(opportunityId, status, verification, startedAt, {
+    const result = this.result(opportunityId, status, verification, startedAt, {
       queriesPlanned: claims.length,
       queriesSkipped: 0,
       sourcesSearched: sources.length,
@@ -280,6 +303,8 @@ export class ResearchExpansionService {
       providerFailures,
       warnings: sources.length === 0 ? [...warnings, 'No distinct configured RSS verification sources are available.'] : warnings,
     });
+    this.executionLog?.withContext({ projectId: opportunity.projectId, opportunityId, researchPackageId: current?.id }, () => this.executionLog?.event('info', 'research_expansion.completed', status, { result }));
+    return result;
   }
 
   private async ensurePackage(opportunityId: string): Promise<ResearchPackageDetail> {
@@ -296,18 +321,42 @@ export class ResearchExpansionService {
     const existing = await this.packageRecords.findByOpportunityId(opportunityId);
     if (existing) {
       const researchPackage = await this.packages.findOne(existing.id);
+      const factClaims = [...new Set(researchPackage.facts
+        .map((fact) => fact.claim)
+        .filter(isVerifiableResearchClaim)
+        .map(normalizeClaimKey)
+        .filter(Boolean))];
+      // A failed/empty extraction must not permanently disable expansion. Use
+      // the existing candidate identity as the bounded discovery query, never
+      // an editorially framed package title.
+      const resolved = factClaims.length === 0
+        ? await this.evidence.resolveOpportunityEvidence(opportunityId)
+        : undefined;
+      const candidateClaims = resolved?.kind === 'candidate'
+        ? [...new Set(resolved.candidates
+          .map((candidate) => candidate.candidateText)
+          .map(normalizeClaimKey)
+          .filter((claim) => claim.length >= 12)
+          .filter(Boolean))]
+        : [];
       return {
         researchPackage,
         verification: researchPackage.verification,
-        claims: [...new Set(researchPackage.facts.map((fact) => normalizeClaimKey(fact.claim)).filter(Boolean))],
+        claims: factClaims.length ? factClaims : candidateClaims,
         existingSourceIds: new Set(researchPackage.signals.map((signal) => signal.researchSourceId)),
       };
     }
 
     const resolved = await this.evidence.resolveOpportunityEvidence(opportunityId);
     const claims = resolved.kind === 'candidate'
-      ? [...new Set(resolved.candidates.map((candidate) => normalizeClaimKey(candidate.candidateText)).filter(Boolean))]
-      : [normalizeClaimKey(opportunityTitle)].filter(Boolean);
+      ? [...new Set(resolved.candidates
+        .map((candidate) => candidate.candidateText)
+        .filter(isVerifiableResearchClaim)
+        .map(normalizeClaimKey)
+        .filter(Boolean))]
+      : isVerifiableResearchClaim(opportunityTitle)
+        ? [normalizeClaimKey(opportunityTitle)]
+        : [];
     const signals = resolved.signals.map((signal) => ({
       signalId: signal.id,
       researchSourceId: signal.researchSourceId,
@@ -329,3 +378,4 @@ export class ResearchExpansionService {
   }
 }
 function hash(value: object): string { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
+function safeErrorCategory(error: unknown) { return error && typeof error === 'object' && 'name' in error && typeof error.name === 'string' ? error.name : 'unknown_error'; }

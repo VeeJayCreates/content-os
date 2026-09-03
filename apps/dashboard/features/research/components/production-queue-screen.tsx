@@ -4,6 +4,7 @@ import * as React from "react";
 import type {
   AudioGeneration,
   ContentScript,
+  EditorialAssessment,
   Project,
   ProductionQueueItem,
   ScenePlan,
@@ -15,10 +16,13 @@ import { getProjects } from "@/features/projects/api/client";
 import {
   audioSegmentMediaUrl,
   fillProductionQueue,
+  generateQueueContentAngle,
+  generateQueueContentPackage,
   generateAudio,
   generateScenePlan,
   getAudioGeneration,
   getProductionQueue,
+  getQueueContentAngle,
   getQueueContentPackage,
   getScenePlan,
   getVisualAssetManifest,
@@ -29,6 +33,10 @@ import {
 } from "@/features/research/api/client";
 import { VisualAssetManifestPanel } from "./visual-asset-manifest-panel";
 import { VideoRenderPanel } from "./video-render-panel";
+import {
+  productionQueuePresentation,
+  sceneDisplayNumber,
+} from "./production-queue-state";
 
 type Values<T> = Record<string, T | undefined>;
 const label = (value: string) =>
@@ -229,6 +237,7 @@ export function ProductionQueueScreen() {
   const [projectId, setProjectId] = React.useState("");
   const [items, setItems] = React.useState<ProductionQueueItem[]>([]);
   const [packages, setPackages] = React.useState<Values<ContentScript>>({});
+  const [angles, setAngles] = React.useState<Values<EditorialAssessment>>({});
   const [plans, setPlans] = React.useState<Values<ScenePlan>>({});
   const [audio, setAudio] = React.useState<Values<AudioGeneration>>({});
   const [manifests, setManifests] = React.useState<Values<VisualAssetManifest>>(
@@ -242,6 +251,7 @@ export function ProductionQueueScreen() {
   const [pending, setPending] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [planPending, setPlanPending] = React.useState<string | null>(null);
+  const [contentPending, setContentPending] = React.useState<string | null>(null);
   const [audioPending, setAudioPending] = React.useState<string | null>(null);
   const [batchId, setBatchId] = React.useState<string | null>(null);
   const [batchNote, setBatchNote] = React.useState<string | null>(null);
@@ -250,12 +260,10 @@ export function ProductionQueueScreen() {
   const planRequest = React.useRef<Record<string, number>>({});
   const audioRequest = React.useRef<Record<string, number>>({});
   const visualRequest = React.useRef<Record<string, number>>({});
-  React.useEffect(
-    () => () => {
-      mounted.current = false;
-    },
-    [],
-  );
+  React.useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const message = (reason: unknown, fallback: string) =>
     reason instanceof ResearchApiError ? reason.message : fallback;
   const loadPlan = React.useCallback(
@@ -322,15 +330,20 @@ export function ProductionQueueScreen() {
         const pairs = await Promise.all(
           queue.map(async (item) => {
             try {
-              return [item.id, await getQueueContentPackage(item.id)] as const;
+              const [contentPackage, angle] = await Promise.all([
+                getQueueContentPackage(item.id).catch(() => undefined),
+                getQueueContentAngle(item.id).catch(() => undefined),
+              ]);
+              return [item.id, contentPackage, angle] as const;
             } catch {
-              return [item.id, undefined] as const;
+              return [item.id, undefined, undefined] as const;
             }
           }),
         );
         if (!mounted.current || requestId !== listRequest.current) return;
         setItems(queue);
-        setPackages(Object.fromEntries(pairs));
+        setPackages(Object.fromEntries(pairs.map(([itemId, contentPackage]) => [itemId, contentPackage])));
+        setAngles(Object.fromEntries(pairs.map(([itemId, , angle]) => [itemId, angle])));
         setError(null);
         pairs.forEach(([itemId, contentPackage]) => {
           if (contentPackage) void loadPlan(itemId, contentPackage.id);
@@ -404,6 +417,29 @@ export function ProductionQueueScreen() {
     } finally {
       if (mounted.current) setPlanPending(null);
     }
+  }
+  async function generateAngle(itemId: string) {
+    if (contentPending) return;
+    setContentPending(itemId);
+    try {
+      const value = await generateQueueContentAngle(itemId);
+      if (mounted.current) setAngles((current) => ({ ...current, [itemId]: value }));
+    } catch (reason) {
+      if (mounted.current) setError(message(reason, "Unable to generate Content Angle."));
+    } finally { if (mounted.current) setContentPending(null); }
+  }
+  async function generateContentPackage(itemId: string) {
+    if (contentPending) return;
+    setContentPending(itemId);
+    try {
+      const value = await generateQueueContentPackage(itemId);
+      if (mounted.current) {
+        setPackages((current) => ({ ...current, [itemId]: value }));
+        void loadPlan(itemId, value.id);
+      }
+    } catch (reason) {
+      if (mounted.current) setError(message(reason, "Unable to generate Content Package."));
+    } finally { if (mounted.current) setContentPending(null); }
   }
   async function generateItemAudio(itemId: string, scriptId: string) {
     if (audioPending) return;
@@ -526,15 +562,22 @@ export function ProductionQueueScreen() {
       {batchNote ? (
         <p className="mt-2 text-sm text-muted-foreground">{batchNote}</p>
       ) : null}
-      {loading ? (
+      {productionQueuePresentation(loading, items.length, error).kind === "loading" ? (
         <p className="mt-6">Loading…</p>
-      ) : error ? (
+      ) : productionQueuePresentation(loading, items.length, error).kind === "error" ? (
         <Card className="mt-6">
           <CardContent className="pt-5">
             {error}{" "}
             <Button variant="outline" onClick={() => void load(projectId)}>
               Retry
             </Button>
+          </CardContent>
+        </Card>
+      ) : productionQueuePresentation(loading, items.length, error).kind === "empty" ? (
+        <Card className="mt-6">
+          <CardContent className="pt-5">
+            <p>Production queue is empty.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Use Fill queue to add eligible verified topics.</p>
           </CardContent>
         </Card>
       ) : (
@@ -560,6 +603,9 @@ export function ProductionQueueScreen() {
                         Content Package · {contentPackage.format} ·{" "}
                         {contentPackage.language}
                       </p>
+                      <p aria-label="Production stages" className="text-xs">
+                        Content: ready · Scene Plan: {plan?.status ?? "not started"} · Audio: {audio[item.id]?.status ?? "not started"} · Visual Assets: {manifests[item.id]?.status ?? "not started"} · Motion Plan: prepared during render · Render: see below
+                      </p>
                       {plan?.status === "ready" ? (
                         <>
                           <Button
@@ -578,13 +624,13 @@ export function ProductionQueueScreen() {
                               className="max-h-[70vh] space-y-3 overflow-y-auto rounded border p-3"
                               aria-label="Scene Plan inspector"
                             >
-                              {plan.scenes.map((scene) => (
+                              {plan.scenes.map((scene, scenePosition) => (
                                 <article
                                   key={scene.id}
                                   className="break-words rounded border p-3"
                                 >
                                   <p className="font-medium text-foreground">
-                                    Scene {scene.index + 1} ·{" "}
+                                    Scene {sceneDisplayNumber(scene, scenePosition)} ·{" "}
                                     {duration(scene.estimatedDurationMs)} ·{" "}
                                     {label(scene.sceneType)} ·{" "}
                                     {label(scene.mediaStrategy)}
@@ -668,8 +714,14 @@ export function ProductionQueueScreen() {
                         </Button>
                       )}
                     </>
+                  ) : angles[item.id] ? (
+                    <Button size="sm" variant="outline" disabled={contentPending !== null} onClick={() => void generateContentPackage(item.id)}>
+                      {contentPending === item.id ? "Generating Content Package…" : "Generate Content Package"}
+                    </Button>
                   ) : (
-                    <p>Content package: generate a Content Angle first.</p>
+                    <Button size="sm" variant="outline" disabled={contentPending !== null} onClick={() => void generateAngle(item.id)}>
+                      {contentPending === item.id ? "Generating Content Angle…" : "Generate Content Angle"}
+                    </Button>
                   )}
                 </CardContent>
               </Card>

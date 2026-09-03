@@ -57,11 +57,17 @@ describe('OpportunityService', () => {
   const metrics = { findByOpportunityId: jest.fn() };
   const detection = { detect: jest.fn() };
   const projects = { findById: jest.fn() };
+  const transcripts = { findBySignalIds: jest.fn() };
+  const evidence = { findTranscriptBySignalIds: jest.fn() };
+  const transcriptJobs = { findBySignalIds: jest.fn() };
   const service = new OpportunityService(
     repository as never,
     metrics as never,
     detection as never,
     projects as never,
+    transcripts as never,
+    evidence as never,
+    transcriptJobs as never,
   );
 
   beforeEach(() => jest.resetAllMocks());
@@ -100,6 +106,9 @@ describe('OpportunityService', () => {
     repository.findSignalsByOpportunityIds.mockResolvedValue(
       new Map([[opportunity.id, []]]),
     );
+    transcripts.findBySignalIds.mockResolvedValue([]);
+    evidence.findTranscriptBySignalIds.mockResolvedValue([]);
+    transcriptJobs.findBySignalIds.mockResolvedValue([]);
     metrics.findByOpportunityId.mockResolvedValue({
       id: 'metric-1',
       opportunityId: opportunity.id,
@@ -128,6 +137,29 @@ describe('OpportunityService', () => {
         independentSourceCount: 2,
         scoreVersion: 'opportunity-metrics-v2',
       },
+    });
+  });
+
+  it('returns linked source-video transcript state without exposing transcript content', async () => {
+    repository.findById.mockResolvedValue(opportunity);
+    repository.findSignalsByOpportunityIds.mockResolvedValue(new Map([[opportunity.id, [{
+      id: 'signal-1', title: 'Competitor video title', url: 'https://youtube.example/watch?v=video', summary: null,
+      sourceName: 'Competitor channel', publishedAt: '2026-01-01T00:00:00.000Z', discoveredAt: '2026-01-02T00:00:00.000Z',
+    }]]]));
+    metrics.findByOpportunityId.mockResolvedValue(undefined);
+    transcripts.findBySignalIds.mockResolvedValue([{ id: 'canonical-1', signalId: 'signal-1', language: 'hi' }]);
+    evidence.findTranscriptBySignalIds.mockResolvedValue([]);
+    transcriptJobs.findBySignalIds.mockResolvedValue([]);
+
+    await expect(service.findOne(opportunity.id)).resolves.toMatchObject({
+      title: opportunity.title,
+      signals: [{
+        id: 'signal-1',
+        title: 'Competitor video title',
+        sourceName: 'Competitor channel',
+        publishedAt: '2026-01-01T00:00:00.000Z',
+        transcript: { status: 'available', hasCanonicalTranscript: true, language: 'hi' },
+      }],
     });
   });
 

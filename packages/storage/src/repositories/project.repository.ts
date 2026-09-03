@@ -53,6 +53,18 @@ export class ProjectRepository {
     return this.findById(id);
   }
 
+  async updateName(id: string, name: string): Promise<Project | undefined> {
+    await db
+      .update(projects)
+      .set({
+        name,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(projects.id, id));
+
+    return this.findById(id);
+  }
+
   async delete(id: string): Promise<void> {
     await db.delete(projects).where(eq(projects.id, id));
   }

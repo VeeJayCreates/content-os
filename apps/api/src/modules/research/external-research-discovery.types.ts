@@ -15,3 +15,17 @@ export interface ExternalResearchSearchProvider {
     maxResults: number;
   }): Promise<ExternalResearchSearchResult[]>;
 }
+
+/** Deliberately safe transport diagnostics: never retain provider output. */
+export type ExternalResearchSearchFailureCategory =
+  | 'local_network_permission_denied'
+  | 'executable_unavailable'
+  | 'timeout'
+  | 'transport_unavailable';
+
+export class ExternalResearchSearchError extends Error {
+  constructor(readonly category: ExternalResearchSearchFailureCategory) {
+    super(`External research search failed: ${category}`);
+    this.name = 'ExternalResearchSearchError';
+  }
+}

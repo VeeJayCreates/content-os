@@ -14,6 +14,24 @@ export function normalizeClaimKey(claim: string): string {
     .trim();
 }
 
+/**
+ * Research facts are evidence-backed propositions, not an arbitrary fragment
+ * from a source headline.  This deliberately conservative screen keeps
+ * topical/editorial framing out of the fact store; it does not rewrite a
+ * source into a supposedly factual claim.
+ */
+export function isVerifiableResearchClaim(claim: string): boolean {
+  const normalized = claim.replace(/\s+/g, ' ').trim();
+  if (normalized.length < 12) return false;
+
+  // Time-sensitive title labels and unqualified superlative/metaphorical
+  // framing require editorial judgement or an explicit comparison dataset.
+  // They cannot be promoted to a verified proposition from title metadata.
+  return !/\b(?:latest\s+updates?|breaking\s+news|biggest|best|worst|most\s+important|bargaining\s+chip)\b/i.test(
+    normalized,
+  );
+}
+
 export function summarizeResearchPackage(
   title: string,
   opportunitySummary: string | null,

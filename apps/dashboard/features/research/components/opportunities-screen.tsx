@@ -5,16 +5,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type {
   Opportunity,
+  OpportunityDetail,
   OpportunityDetectionResult,
+  OpportunitySignal,
   OpportunityStatus,
   Project,
+  SignalTranscript,
 } from "@content-os/contracts";
 import { ExternalLink, RefreshCw, Search, Sparkles } from "lucide-react";
 
 import {
   buildResearchPackage,
   detectOpportunities,
+  getOpportunity,
   getOpportunities,
+  getSignalTranscript,
   ResearchApiError,
   updateOpportunityStatus,
 } from "@/features/research/api/client";
@@ -60,7 +65,7 @@ export function OpportunitiesScreen() {
         setError(
           reason instanceof ResearchApiError
             ? reason.message
-            : "Unable to load trending topics. Please try again.",
+            : "Unable to load Research Topics. Please try again.",
         );
     } finally {
       if (mounted.current && requestId.current === id) setLoading(false);
@@ -103,7 +108,7 @@ export function OpportunitiesScreen() {
         setError(
           reason instanceof ResearchApiError
             ? reason.message
-            : "Unable to find trending topics.",
+            : "Unable to find Research Topics.",
         );
     } finally {
       if (mounted.current) setDetecting(false);
@@ -122,10 +127,10 @@ export function OpportunitiesScreen() {
             id="opportunities-title"
             className="text-2xl font-semibold tracking-tight sm:text-3xl"
           >
-            Trending Topics
+            Research Topics
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Potentially relevant or emerging subjects detected from your source content.
+            Underlying subjects derived from competitor source videos. A Research Topic is not a competitor video title or a final ContentOS title.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             Topic Strength reflects observable, deterministic signals from source content and emerging-topic activity.
@@ -163,7 +168,7 @@ export function OpportunitiesScreen() {
         <Card className="mb-5 border-emerald-400/20 bg-emerald-400/5">
           <CardContent className="pt-5 text-sm">
             Processed {result.signalsProcessed} source items:{" "}
-            {result.opportunitiesCreated} trending topics found, {result.opportunitiesUpdated}{" "}
+            {result.opportunitiesCreated} Research Topics found, {result.opportunitiesUpdated}{" "}
             updated, {result.linksCreated} links added.
           </CardContent>
         </Card>
@@ -172,7 +177,7 @@ export function OpportunitiesScreen() {
       {!loading && error ? (
         <Card className="border-red-400/20 bg-red-400/5">
           <CardHeader>
-            <CardTitle>We couldn’t load trending topics</CardTitle>
+            <CardTitle>We couldn’t load Research Topics</CardTitle>
             <CardDescription>{error}</CardDescription>
           </CardHeader>
           <CardContent>
@@ -190,9 +195,9 @@ export function OpportunitiesScreen() {
         <Card className="border-dashed bg-card/40">
           <CardHeader className="items-center pt-10 text-center">
             <Search className="size-8 text-primary" />
-            <CardTitle className="mt-2">No trending topics found</CardTitle>
+            <CardTitle className="mt-2">No Research Topics found</CardTitle>
             <CardDescription>
-              Find trending topics after adding source content from your research sources.
+              Find topics after adding source content from your research sources.
             </CardDescription>
           </CardHeader>
         </Card>
@@ -222,6 +227,8 @@ function OpportunityCard({
   const router = useRouter();
   const [pending, setPending] = React.useState(false);
   const [buildingResearch, setBuildingResearch] = React.useState(false);
+  const [detail, setDetail] = React.useState<OpportunityDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   async function setStatus(status: OpportunityStatus) {
     if (pending) return;
@@ -257,12 +264,24 @@ function OpportunityCard({
       setBuildingResearch(false);
     }
   }
+  async function inspectSourceVideos() {
+    if (detail || loadingDetail) return;
+    setLoadingDetail(true);
+    setError(null);
+    try {
+      setDetail(await getOpportunity(item.id));
+    } catch (reason) {
+      setError(reason instanceof ResearchApiError ? reason.message : "Unable to load the topic’s source videos.");
+    } finally {
+      setLoadingDetail(false);
+    }
+  }
   return (
     <Card className="bg-card/60">
       <CardHeader className="gap-2 p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
           <div>
-            <CardTitle className="text-base">{item.title}</CardTitle>
+            <CardTitle className="text-base">Research Topic: {item.title}</CardTitle>
             <CardDescription className="mt-1">
               {item.project.name} · {item.signalCount} source items ·{" "}
               {item.sourceCount} sources · Last seen{" "}
@@ -283,7 +302,7 @@ function OpportunityCard({
           target="_blank"
           rel="noreferrer"
         >
-          Original source <ExternalLink className="size-3.5" />
+          Representative source <ExternalLink className="size-3.5" />
         </a>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -293,6 +312,9 @@ function OpportunityCard({
             onClick={() => void buildResearch()}
           >
             {buildingResearch ? "Building…" : "Build research"}
+          </Button>
+          <Button size="sm" variant="outline" disabled={loadingDetail} onClick={() => void inspectSourceVideos()}>
+            {loadingDetail ? "Loading videos…" : detail ? "Source videos shown" : "Inspect source videos"}
           </Button>
           <Button
             size="sm"
@@ -311,6 +333,7 @@ function OpportunityCard({
             Reject
           </Button>
         </div>
+        {detail ? <TopicSourceVideos topic={detail} /> : null}
         {error ? (
           <p role="alert" className="text-sm text-red-200">
             {error}
@@ -319,6 +342,54 @@ function OpportunityCard({
       </CardContent>
     </Card>
   );
+}
+
+function TopicSourceVideos({ topic }: { topic: OpportunityDetail }) {
+  return (
+    <section className="rounded-md border border-border/70 bg-muted/20 p-3" aria-label={`Source videos for ${topic.title}`}>
+      <p className="text-xs font-medium uppercase tracking-wide text-primary">Research Topic</p>
+      <p className="mt-1 text-sm font-medium">{topic.title}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{topic.signals.length} linked competitor source {topic.signals.length === 1 ? "video" : "videos"}. These titles are source material, not the Research Topic.</p>
+      <div className="mt-3 grid gap-3">
+        {topic.signals.map((signal) => <TopicSourceVideo key={signal.id} signal={signal} />)}
+      </div>
+    </section>
+  );
+}
+
+function TopicSourceVideo({ signal }: { signal: OpportunitySignal }) {
+  const [transcript, setTranscript] = React.useState<SignalTranscript | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  async function viewTranscript() {
+    if (transcript || loading) return;
+    setLoading(true); setError(null);
+    try { setTranscript(await getSignalTranscript(signal.id)); }
+    catch { setError("Unable to load the canonical transcript."); }
+    finally { setLoading(false); }
+  }
+  return (
+    <article className="rounded border border-border/60 bg-background/40 p-3 text-sm">
+      <p className="font-medium">Competitor video: {signal.title}</p>
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <span>Channel: {signal.sourceName}</span>
+        <span>Published: {signal.publishedAt ? formatResearchDate(signal.publishedAt) : "Unavailable"}</span>
+        <span>Transcript: {topicTranscriptStatusLabel(signal.transcript.status)}</span>
+        <span>Canonical transcript: {signal.transcript.hasCanonicalTranscript ? "STORED" : "NOT STORED"}</span>
+        {signal.transcript.language ? <span>Language: {signal.transcript.language}</span> : null}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button asChild size="sm" variant="outline"><a href={signal.url} target="_blank" rel="noreferrer">Original video <ExternalLink className="size-3.5" /></a></Button>
+        {signal.transcript.hasCanonicalTranscript ? <Button size="sm" variant="outline" disabled={loading} onClick={() => void viewTranscript()}>{loading ? "Loading transcript…" : "View full transcript"}</Button> : null}
+      </div>
+      {error ? <p role="alert" className="mt-2 text-xs text-destructive">{error}</p> : null}
+      {transcript?.content ? <details open className="mt-3 rounded border border-border/60 bg-muted/20 p-3 text-xs"><summary className="cursor-pointer font-medium">Canonical transcript · {transcript.content.length.toLocaleString()} characters</summary><p className="mt-3 whitespace-pre-wrap leading-5 text-muted-foreground">{transcript.content}</p></details> : null}
+    </article>
+  );
+}
+
+export function topicTranscriptStatusLabel(status: OpportunitySignal["transcript"]["status"]) {
+  return status === "available" ? "AVAILABLE" : status === "no_captions" ? "NO CAPTIONS" : status === "pending" ? "PENDING" : status === "processing" ? "PROCESSING" : status === "retry_scheduled" ? "RETRY SCHEDULED" : status === "permanent_failure" || status === "failed" ? "FAILED" : "NOT CHECKED";
 }
 
 function Skeleton() {

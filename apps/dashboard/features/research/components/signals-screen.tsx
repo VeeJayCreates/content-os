@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import Link from "next/link";
-import type { Project, ResearchSource, Signal } from "@content-os/contracts";
+import type { Project, ResearchSource, Signal, SignalTranscript } from "@content-os/contracts";
 import { ExternalLink, RefreshCw, Search } from "lucide-react";
 
 import {
   getResearchSources,
+  getSignalTranscript,
   getSignals,
   ResearchApiError,
 } from "@/features/research/api/client";
@@ -205,13 +206,23 @@ export function SignalsScreen() {
   );
 }
 
-function SignalCard({ signal }: { signal: Signal }) {
+export function SignalCard({ signal }: { signal: Signal }) {
+  const [transcript, setTranscript] = React.useState<SignalTranscript | null>(null);
+  const [isLoadingTranscript, setIsLoadingTranscript] = React.useState(false);
+  const [transcriptError, setTranscriptError] = React.useState<string | null>(null);
+  const showTranscript = async () => {
+    if (transcript || isLoadingTranscript) return;
+    setIsLoadingTranscript(true); setTranscriptError(null);
+    try { setTranscript(await getSignalTranscript(signal.id)); }
+    catch { setTranscriptError("Unable to load the transcript. Please try again."); }
+    finally { setIsLoadingTranscript(false); }
+  };
   return (
     <Card className="bg-card/60">
       <CardHeader className="gap-2 p-4 sm:p-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <CardTitle className="text-base">{signal.title}</CardTitle>
+            <CardTitle className="text-base">Source video: {signal.title}</CardTitle>
             <CardDescription className="mt-1">
               {signal.project.name} · {signal.sourceName} ·{" "}
               {formatResearchSourceType(signal.sourceType)}
@@ -229,16 +240,38 @@ function SignalCard({ signal }: { signal: Signal }) {
         {signal.summary ? (
           <p className="line-clamp-3 text-muted-foreground">{signal.summary}</p>
         ) : null}
+        <div className="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-sm">
+          <span className="font-medium">Research topic: </span>
+          <span className="text-muted-foreground">{signal.researchTopic ?? "Topic processing pending"}</span>
+        </div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           <span>
             Published: {signal.publishedAt ? formatResearchDate(signal.publishedAt) : "Unavailable"}
           </span>
           <span>Discovered: {formatResearchDate(signal.discoveredAt)}</span>
         </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <TranscriptStatus status={signal.transcript.status} />
+          {signal.transcript.language ? <span className="text-muted-foreground">Language: {signal.transcript.language}</span> : null}
+          {signal.transcript.trackKind ? <span className="text-muted-foreground">Source: {formatTrackKind(signal.transcript.trackKind)}</span> : null}
+          {signal.transcript.status === "available" ? <Button type="button" size="sm" variant="outline" onClick={() => void showTranscript()} disabled={isLoadingTranscript}>{isLoadingTranscript ? "Loading transcript…" : "View full transcript"}</Button> : null}
+        </div>
+        {transcriptError ? <p className="text-xs text-destructive" role="alert">{transcriptError}</p> : null}
+        {transcript?.content ? <details className="rounded-md border border-border/70 bg-muted/20 p-3 text-xs"><summary className="cursor-pointer font-medium">Transcript · {formatTrackKind(transcript.trackKind)}</summary><p className="mt-3 whitespace-pre-wrap leading-5 text-muted-foreground">{transcript.content}</p></details> : null}
       </CardContent>
     </Card>
   );
 }
+
+function TranscriptStatus({ status }: { status: Signal["transcript"]["status"] }) {
+  const label = transcriptStatusLabel(status);
+  const tone = status === "available" ? "text-emerald-500" : status === "failed" || status === "permanent_failure" ? "text-destructive" : "text-muted-foreground";
+  return <span className={`font-medium ${tone}`}>Transcript: {label}</span>;
+}
+export function transcriptStatusLabel(status: Signal["transcript"]["status"]) {
+  return status === "available" ? "AVAILABLE" : status === "no_captions" ? "NO CAPTIONS" : status === "pending" ? "PENDING" : status === "processing" ? "PROCESSING" : status === "retry_scheduled" ? "RETRY SCHEDULED" : status === "permanent_failure" || status === "failed" ? "FAILED" : "NOT CHECKED";
+}
+function formatTrackKind(value: SignalTranscript["trackKind"]) { return value === "manual_youtube" ? "MANUAL_YOUTUBE" : value === "auto_youtube" ? "AUTO_YOUTUBE" : value === "whisper" ? "WHISPER" : "Unavailable"; }
 
 function SignalsSkeleton() {
   return (

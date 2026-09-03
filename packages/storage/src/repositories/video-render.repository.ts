@@ -70,9 +70,9 @@ export class VideoRenderJobRepository{
    const updated=tx.select().from(videoRenderJobAttempts).where(eq(videoRenderJobAttempts.id,attempt.id)).get()!;return this.present(job,updated);
   });
  }
- async claimNextQueued(){
+ async claimNextQueued(contentScriptId?:string){
   return db.transaction(tx=>{
-   const candidates=tx.select({attempt:videoRenderJobAttempts,job:videoRenderJobs}).from(videoRenderJobAttempts).innerJoin(videoRenderJobs,and(eq(videoRenderJobs.id,videoRenderJobAttempts.jobId),eq(videoRenderJobs.currentAttemptId,videoRenderJobAttempts.id))).where(eq(videoRenderJobAttempts.status,'queued')).orderBy(asc(videoRenderJobAttempts.queuedAt),asc(videoRenderJobAttempts.id)).all();
+   const candidates=tx.select({attempt:videoRenderJobAttempts,job:videoRenderJobs}).from(videoRenderJobAttempts).innerJoin(videoRenderJobs,and(eq(videoRenderJobs.id,videoRenderJobAttempts.jobId),eq(videoRenderJobs.currentAttemptId,videoRenderJobAttempts.id))).where(contentScriptId?and(eq(videoRenderJobAttempts.status,'queued'),eq(videoRenderJobs.contentScriptId,contentScriptId)):eq(videoRenderJobAttempts.status,'queued')).orderBy(asc(videoRenderJobAttempts.queuedAt),asc(videoRenderJobAttempts.id)).all();
    for(const candidate of candidates){const now=new Date().toISOString();const claimed=tx.update(videoRenderJobAttempts).set({status:'running',startedAt:now,updatedAt:now}).where(and(eq(videoRenderJobAttempts.id,candidate.attempt.id),eq(videoRenderJobAttempts.status,'queued'))).run();if(claimed.changes===1){const attempt={...candidate.attempt,status:'running',startedAt:now,updatedAt:now};return this.present(candidate.job,attempt);}}
    return undefined;
   });

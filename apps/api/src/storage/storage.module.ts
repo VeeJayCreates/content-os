@@ -5,6 +5,7 @@ import {
   ContentRepository,
   ContentStyleProfileRepository,
   ProjectRepository,
+  ProjectChannelRepository,
   ProjectEditorialProfileRepository,
   ResearchSourceRepository,
   SignalRepository,
@@ -19,6 +20,7 @@ import {
   TopicCandidateRepository,
   SemanticEmbeddingCacheRepository,
   ResearchExpansionRepository,
+  ResearchAutomationRepository,
   ProductionQueueRepository,
   ScenePlanRepository,
   AudioGenerationRepository,
@@ -31,6 +33,10 @@ import {
   VideoMotionRepository,
   AgentRuntimeRepository,
   AgentPipelineRepository,
+  GeographicReferenceRepository,
+  SourceEvidenceContentRepository,
+  SourceTranscriptRepository,
+  TranscriptAcquisitionJobRepository,
 } from '@content-os/storage';
 
 @Module({
@@ -39,6 +45,7 @@ import {
     ContentRepository,
     ContentStyleProfileRepository,
     ProjectRepository,
+    ProjectChannelRepository,
     ProjectEditorialProfileRepository,
     ResearchSourceRepository,
     SignalRepository,
@@ -53,6 +60,7 @@ import {
     TopicCandidateRepository,
     SemanticEmbeddingCacheRepository,
     ResearchExpansionRepository,
+    ResearchAutomationRepository,
     ProductionQueueRepository,
     ScenePlanRepository,
     AudioGenerationRepository,
@@ -65,6 +73,10 @@ import {
     VideoMotionRepository,
     AgentRuntimeRepository,
     AgentPipelineRepository,
+    GeographicReferenceRepository,
+    SourceEvidenceContentRepository,
+    SourceTranscriptRepository,
+    TranscriptAcquisitionJobRepository,
   ],
 })
 export class StorageModule {}

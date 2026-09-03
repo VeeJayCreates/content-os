@@ -1,0 +1,12 @@
+[
+  { "videoId": "mvskKlpqZQE", "source": "reference", "channel": "reference", "topic": "Nepal seeking limited foreign rescue assistance after severe flooding", "expectedLanguage": "hi", "videoDurationMs": 600000 },
+  { "videoId": "BElQS9JzT2s", "source": "World Affairs by Unacademy", "channel": "World Affairs by Unacademy", "topic": "China's personnel changes linked to Galwan and Doklam and their India-China implications", "expectedLanguage": "hinglish" },
+  { "videoId": "FkLPNqErvbA", "source": "Defence Matrix- हिंदी", "channel": "Defence Matrix- हिंदी", "topic": "India-Pakistan naval balance and an Indian carrier battle group", "expectedLanguage": "hi" },
+  { "videoId": "NhEN07dahhw", "source": "TLDR News Global", "channel": "TLDR News Global", "topic": "United States-Canada trade conflict and Canadian sovereignty concerns", "expectedLanguage": "en" },
+  { "videoId": "FpJUn1QN7TY", "source": "Srijan Kalam", "channel": "Srijan Kalam", "topic": "NASA's planned mapping of otherwise unseen parts of the universe", "expectedLanguage": "en" },
+  { "videoId": "vFo5zcA7UrM", "source": "Apni Pathshala", "channel": "Apni Pathshala", "topic": "United States debt growth under Trump and Biden", "expectedLanguage": "hinglish" },
+  { "videoId": "1vIRaNlvmvE", "source": "SNG NEWS", "channel": "SNG NEWS", "topic": "Turkey, Saudi Arabia, and Pakistan's defence-pact committee meeting", "expectedLanguage": "en" },
+  { "videoId": "qvLa9zW7E-Q", "source": "Bilal Kirmani", "channel": "Bilal Kirmani", "topic": "Indian domestic politics over Zero Hunger recognition and hunger in India", "expectedLanguage": "hinglish" },
+  { "videoId": "9nXTrLKz2nA", "source": "CaspianReport", "channel": "CaspianReport", "topic": "Strategic incentives that make war with Iran easier than peace", "expectedLanguage": "en" },
+  { "videoId": "3QsEgPIoaVY", "source": "Ankit Inspires India", "channel": "Ankit Inspires India", "topic": "Nepal's acceptance of international aid and assistance after flooding", "expectedLanguage": "hinglish" }
+]

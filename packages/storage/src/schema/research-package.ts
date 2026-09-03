@@ -14,6 +14,7 @@ export const researchPackages = sqliteTable(
     title: text("title").notNull(),
     summary: text("summary").notNull(),
     status: text("status").notNull(),
+    lifecycleState: text("lifecycle_state").notNull().default('discovered'),
     confidenceScore: integer("confidence_score").notNull(),
     sourceCount: integer("source_count").notNull(),
     signalCount: integer("signal_count").notNull(),
@@ -34,6 +35,7 @@ export const researchFacts = sqliteTable(
     normalizedClaimKey: text("normalized_claim_key").notNull(),
     confidence: integer("confidence").notNull(),
     status: text("status").notNull(),
+    geographicEntities: text("geographic_entities_json", { mode: "json" }).$type<unknown[]>().notNull().default([]),
     createdAt: text("created_at").notNull(),
   },
   (table) => [
@@ -59,6 +61,7 @@ export const researchFactEvidence = sqliteTable(
   ],
 );
 
+/** Immutable source-content citation for a generated fact, including its bounded evidence window. */
 export type ResearchPackage = typeof researchPackages.$inferSelect;
 export type NewResearchPackage = typeof researchPackages.$inferInsert;
 export type ResearchFact = typeof researchFacts.$inferSelect;

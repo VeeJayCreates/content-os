@@ -3,7 +3,9 @@ import {
   ResearchFactStatus,
   ResearchPackageStatus,
   ResearchVerificationStatus,
+  ResearchLifecycleState,
 } from "./enums.js";
+import type { GeographicEntity } from './geographic-reference.js';
 
 export interface ResearchPackage {
   id: string;
@@ -14,6 +16,7 @@ export interface ResearchPackage {
   title: string;
   summary: string;
   status: ResearchPackageStatus;
+  lifecycleState: ResearchLifecycleState;
   confidenceScore: number;
   sourceCount: number;
   signalCount: number;
@@ -39,6 +42,10 @@ export interface ResearchEvidence {
  */
 export interface ResearchVerification {
   verificationStatus: ResearchVerificationStatus;
+  /** Distinct underlying articles/videos/documents, never extraction chunks. */
+  supportingContentCount: number;
+  /** Persisted description/transcript/article records; not a readiness gate. */
+  evidenceRecordCount: number;
   evidenceSignalCount: number;
   distinctSourceCount: number;
   independentSourceCount: number;
@@ -53,6 +60,7 @@ export interface ResearchFact {
   claim: string;
   confidence: number;
   status: ResearchFactStatus;
+  geographicEntities: GeographicEntity[];
   evidence: ResearchEvidence[];
   createdAt: string;
 }

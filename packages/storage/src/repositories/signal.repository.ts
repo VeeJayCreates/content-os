@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import { and, desc, eq, getTableColumns } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, inArray } from 'drizzle-orm';
 
 import { db } from '../db.js';
 import { projects } from '../schema/project.js';
@@ -72,6 +72,53 @@ export class SignalRepository {
     return rows[0];
   }
 
+  async findByResearchSourceAndExternalId(
+    researchSourceId: string,
+    externalId: string,
+  ): Promise<SignalWithContext | undefined> {
+    const rows = await db
+      .select({
+        ...columns,
+        projectName: projects.name,
+        sourceName: researchSources.name,
+      })
+      .from(signals)
+      .innerJoin(projects, eq(signals.projectId, projects.id))
+      .innerJoin(researchSources, eq(signals.researchSourceId, researchSources.id))
+      .where(
+        and(
+          eq(signals.researchSourceId, researchSourceId),
+          eq(signals.externalId, externalId),
+        ),
+      );
+
+    return rows[0];
+  }
+
+  async findByResearchSourceAndExternalIds(
+    researchSourceId: string,
+    externalIds: string[],
+  ): Promise<SignalWithContext | undefined> {
+    if (externalIds.length === 0) return undefined;
+    const rows = await db
+      .select({
+        ...columns,
+        projectName: projects.name,
+        sourceName: researchSources.name,
+      })
+      .from(signals)
+      .innerJoin(projects, eq(signals.projectId, projects.id))
+      .innerJoin(researchSources, eq(signals.researchSourceId, researchSources.id))
+      .where(
+        and(
+          eq(signals.researchSourceId, researchSourceId),
+          inArray(signals.externalId, externalIds),
+        ),
+      );
+
+    return rows[0];
+  }
+
   async create(
     data: Omit<NewSignal, 'id' | 'createdAt'>,
   ): Promise<SignalCreateResult> {
@@ -90,6 +137,24 @@ export class SignalRepository {
 
       throw error;
     }
+  }
+
+  /** Repairs the legacy/raw YouTube identity form without replacing any signal. */
+  async normalizeYouTubeExternalIds(signalIds: string[]): Promise<number> {
+    if (!signalIds.length) return 0;
+    const rows = await db.select().from(signals).where(inArray(signals.id, signalIds));
+    let normalized = 0;
+    for (const signal of rows) {
+      const raw = signal.externalId.trim();
+      if (signal.sourceType !== 'youtube' || !raw || raw.startsWith('youtube:')) continue;
+      try {
+        await db.update(signals).set({ externalId: `youtube:${raw}` }).where(eq(signals.id, signal.id));
+        normalized += 1;
+      } catch (error) {
+        if (!this.isDuplicateError(error)) throw error;
+      }
+    }
+    return normalized;
   }
 
   private isDuplicateError(error: unknown): boolean {

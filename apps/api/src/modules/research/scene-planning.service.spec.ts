@@ -103,4 +103,17 @@ describe('ScenePlanningService', () => {
     plans.findByContentScriptId.mockResolvedValue({ projectId: 'project-other' });
     await expect(service().find(script.id)).rejects.toThrow('not found');
   });
+
+  it('preserves supplied fact-backed geographic IDs and rejects invented selections', async () => {
+    const entity = { id: 'geo-entity-1', canonicalName: 'Reviewed Strait', aliases: [], entityType: 'strait', sourceFactIds: ['fact-1'], sourceSignalIds: ['signal-1'] };
+    scripts.findById.mockResolvedValue({ ...script, geographicEntities: [entity] });
+    const output = validOutput(); output.scenes[0].geographicEntityIds = [entity.id];
+    runtime.structuredGeneration.mockResolvedValue(output);
+    await service().generate(script.id);
+    expect(runtime.structuredGeneration.mock.calls[0][0].input.geographicEntities).toEqual([entity]);
+    expect(plans.upsert.mock.calls[0][1][0]).toMatchObject({ geographicEntityIds: [entity.id] });
+    output.scenes[0].geographicEntityIds = ['invented'];
+    runtime.structuredGeneration.mockResolvedValue(output);
+    await expect(service().generate(script.id)).rejects.toThrow('unsupported geographic entities');
+  });
 });

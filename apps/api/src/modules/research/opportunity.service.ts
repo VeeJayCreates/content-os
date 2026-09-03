@@ -2,6 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { OPPORTUNITY_METRICS_V2_VERSION } from '@content-os/contracts';
 import type {
@@ -9,15 +10,20 @@ import type {
   OpportunityDetail,
   OpportunityMetricsV2,
   OpportunityStatus,
+  TranscriptReviewStatus,
 } from '@content-os/contracts';
 import {
   OpportunityMetricRepository,
   OpportunityRepository,
   OpportunityWithProject,
   ProjectRepository,
+  SourceEvidenceContentRepository,
+  SourceTranscriptRepository,
+  TranscriptAcquisitionJobRepository,
 } from '@content-os/storage';
 
 import { OpportunityDetectionService } from './opportunity-detection.service';
+import { ResearchExecutionLogger } from './research-execution-logger.service';
 
 @Injectable()
 export class OpportunityService {
@@ -26,13 +32,31 @@ export class OpportunityService {
     private readonly metrics: OpportunityMetricRepository,
     private readonly detection: OpportunityDetectionService,
     private readonly projects: ProjectRepository,
+    private readonly transcripts: SourceTranscriptRepository,
+    private readonly evidence: SourceEvidenceContentRepository,
+    private readonly transcriptJobs: TranscriptAcquisitionJobRepository,
+    @Optional() private readonly executionLog?: ResearchExecutionLogger,
   ) {}
 
   async detect(projectId?: string) {
     if (projectId && !(await this.projects.findById(projectId))) {
       throw new NotFoundException('Project not found');
     }
-    return this.detection.detect(projectId);
+    const startedAt = Date.now();
+    const execute = async () => {
+      this.executionLog?.event('info', 'trending_topics.request.started', 'started', { result: { endpoint: 'POST /opportunities/detect', projectScope: projectId ?? 'all_projects' } });
+      try {
+        const result = await this.detection.detect(projectId);
+        this.executionLog?.event('info', 'trending_topics.request.completed', 'completed', { result, durationMs: Date.now() - startedAt });
+        return result;
+      } catch (error) {
+        this.executionLog?.event('error', 'trending_topics.request.failed', 'failed', { result: { failureCategory: safeFailureCategory(error), endpoint: 'POST /opportunities/detect' }, durationMs: Date.now() - startedAt });
+        throw error;
+      }
+    };
+    return this.executionLog
+      ? this.executionLog.withRun(projectId ?? 'all-projects', execute)
+      : execute();
   }
 
   async findAll(projectId?: string): Promise<Opportunity[]> {
@@ -52,6 +76,15 @@ export class OpportunityService {
       this.metrics.findByOpportunityId(id, OPPORTUNITY_METRICS_V2_VERSION),
     ]);
     const signals = signalsByOpportunity.get(id) ?? [];
+    const signalIds = signals.map((signal) => signal.id);
+    const [canonicalTranscripts, evidence, jobs] = await Promise.all([
+      this.transcripts.findBySignalIds(signalIds),
+      this.evidence.findTranscriptBySignalIds(signalIds),
+      this.transcriptJobs.findBySignalIds(signalIds),
+    ]);
+    const canonicalBySignal = new Map(canonicalTranscripts.map((item) => [item.signalId, item]));
+    const evidenceBySignal = latestEvidenceBySignal(evidence);
+    const jobsBySignal = latestJobsBySignal(jobs);
 
     return {
       ...this.toOpportunity(record),
@@ -61,7 +94,9 @@ export class OpportunityService {
         url: signal.url,
         summary: signal.summary,
         sourceName: signal.sourceName,
+        publishedAt: signal.publishedAt,
         discoveredAt: signal.discoveredAt,
+        transcript: topicSignalTranscript(canonicalBySignal.get(signal.id), evidenceBySignal.get(signal.id), jobsBySignal.get(signal.id)),
       })),
       metricsV2: metricsV2 ? this.toMetricsV2(metricsV2) : null,
     };
@@ -126,4 +161,41 @@ export class OpportunityService {
       scoreVersion: OPPORTUNITY_METRICS_V2_VERSION,
     };
   }
+}
+
+function latestEvidenceBySignal<T extends { signalId: string; status: string; acquiredAt: string; language: string | null }>(items: T[]): Map<string, T> {
+  const result = new Map<string, T>();
+  for (const item of items) {
+    const current = result.get(item.signalId);
+    if (!current || item.status === 'available' || current.status !== 'available') result.set(item.signalId, item);
+  }
+  return result;
+}
+
+function latestJobsBySignal<T extends { signalId: string; status: string; createdAt: string }>(items: T[]): Map<string, T> {
+  const active = new Set(['pending', 'processing', 'retryable_failure']);
+  const result = new Map<string, T>();
+  for (const item of items) {
+    const current = result.get(item.signalId);
+    if (!current || (active.has(item.status) && !active.has(current.status)) || (active.has(item.status) === active.has(current.status) && item.createdAt > current.createdAt)) result.set(item.signalId, item);
+  }
+  return result;
+}
+
+function topicSignalTranscript(
+  canonical: { id: string; language: string | null } | undefined,
+  evidence: { status: string; language: string | null } | undefined,
+  job: { status: string } | undefined,
+): { status: TranscriptReviewStatus; hasCanonicalTranscript: boolean; language: string | null } {
+  if (canonical) return { status: 'available' as const, hasCanonicalTranscript: true, language: canonical.language };
+  const jobStatus = job?.status === 'pending' ? 'pending' : job?.status === 'processing' ? 'processing' : job?.status === 'retryable_failure' ? 'retry_scheduled' : job?.status === 'permanent_failure' ? 'permanent_failure' : job?.status === 'no_captions' ? 'no_captions' : undefined;
+  if (jobStatus) return { status: jobStatus, hasCanonicalTranscript: false, language: evidence?.language ?? null };
+  const evidenceStatus = evidence?.status === 'available' ? 'available' : evidence?.status === 'unavailable' ? 'no_captions' : evidence ? 'failed' : 'not_checked';
+  return { status: evidenceStatus, hasCanonicalTranscript: false, language: evidence?.language ?? null };
+}
+
+function safeFailureCategory(error: unknown): string {
+  return error && typeof error === 'object' && 'name' in error && typeof error.name === 'string'
+    ? error.name.slice(0, 80)
+    : 'unknown_error';
 }

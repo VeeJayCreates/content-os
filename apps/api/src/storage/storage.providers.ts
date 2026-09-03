@@ -2,6 +2,7 @@ import {
   ContentRepository,
   ContentStyleProfileRepository,
   ProjectRepository,
+  ProjectChannelRepository,
   ResearchSourceRepository,
   SignalRepository,
   OpportunityRepository,
@@ -16,6 +17,7 @@ import {
   TopicCandidateRepository,
   SemanticEmbeddingCacheRepository,
   ResearchExpansionRepository,
+  ResearchAutomationRepository,
   ProductionQueueRepository,
   ScenePlanRepository,
   AudioGenerationRepository,
@@ -28,12 +30,20 @@ import {
   VideoMotionRepository,
   AgentRuntimeRepository,
   AgentPipelineRepository,
+  GeographicReferenceRepository,
+  SourceEvidenceContentRepository,
+  SourceTranscriptRepository,
+  TranscriptAcquisitionJobRepository,
 } from '@content-os/storage';
 
 export const storageProviders = [
   {
     provide: ProjectRepository,
     useFactory: () => new ProjectRepository(),
+  },
+  {
+    provide: ProjectChannelRepository,
+    useFactory: () => new ProjectChannelRepository(),
   },
   {
     provide: ProjectEditorialProfileRepository,
@@ -72,6 +82,7 @@ export const storageProviders = [
   { provide: TopicCandidateRepository, useFactory: () => new TopicCandidateRepository() },
   { provide: SemanticEmbeddingCacheRepository, useFactory: () => new SemanticEmbeddingCacheRepository() },
   { provide: ResearchExpansionRepository, useFactory: () => new ResearchExpansionRepository() },
+  { provide: ResearchAutomationRepository, useFactory: () => new ResearchAutomationRepository() },
   { provide: ProductionQueueRepository, useFactory: () => new ProductionQueueRepository() },
   { provide: ScenePlanRepository, useFactory: () => new ScenePlanRepository() },
   { provide: AudioGenerationRepository, useFactory: () => new AudioGenerationRepository() },
@@ -84,4 +95,8 @@ export const storageProviders = [
   { provide: VideoMotionRepository, useFactory: () => new VideoMotionRepository() },
   { provide: AgentRuntimeRepository, useFactory: () => new AgentRuntimeRepository() },
   { provide: AgentPipelineRepository, useFactory: () => new AgentPipelineRepository() },
+  { provide: GeographicReferenceRepository, useFactory: () => new GeographicReferenceRepository() },
+  { provide: SourceEvidenceContentRepository, useFactory: () => new SourceEvidenceContentRepository() },
+  { provide: SourceTranscriptRepository, useFactory: () => new SourceTranscriptRepository() },
+  { provide: TranscriptAcquisitionJobRepository, useFactory: () => new TranscriptAcquisitionJobRepository() },
 ];

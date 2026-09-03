@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "providers": {
+    "contentos-yt-dlp": {
+      "requiredExecutable": "yt-dlp",
+      "preparedVersion": "2026.07.04",
+      "poProviderConfiguration": "represented from non-secret environment settings only"
+    },
+    "jdepoix-youtube-transcript-api": {
+      "requiredPythonModule": "youtube-transcript-api",
+      "preparedVersion": "1.2.4"
+    },
+    "nadimtuhin-ytranscript": {
+      "npmPackage": "@nadimtuhin/ytranscript",
+      "preparedVersion": "1.3.0",
+      "isolatedInstallPath": ".local/transcript-provider-benchmark/ytranscript"
+    },
+    "rapha30-yt-youtube-transcript": {
+      "repository": "https://github.com/rapha30/yt-youtube-transcript",
+      "license": "MIT",
+      "preparedVersionOrCommit": null,
+      "status": "not_prepared",
+      "blocker": "No GitHub release was available; Go is not installed and the local Docker daemon is unavailable. Set TRANSCRIPT_BENCHMARK_RAPHA_EXECUTABLE after installing its official CLI in isolated tooling."
+    }
+  }
+}

@@ -218,4 +218,230 @@ describe('Semantic Topic Clustering V2', () => {
     expect(service.lastExecutionMetrics()).toMatchObject({ preRerankGuardRejections: 2, rerankProviderRequests: 0 });
     expect(runtime.rerank).not.toHaveBeenCalled();
   });
+
+  it('finds the best Javelin topic from multiple semantically related existing topics', async () => {
+    const vectors: Record<string, number[]> = {
+      'India places order for US Javelin missiles': [1, 0],
+      'Why is India buying US Javelin Missiles': [0.98, 0.02],
+      'India signs Javelin missile deal with US': [0.96, 0.04],
+      'India joins GCAP programme': [0.2, 0.98],
+      'What is Rafale F4.3?': [0.1, 0.99],
+    };
+
+    const runtime = {
+      route: jest.fn(() => ({
+        provider: 'local-qwen-embedding',
+        model: 'Qwen3-Embedding-0.6B',
+      })),
+      embed: jest.fn(async ({ texts }) => ({
+        embeddings: texts.map((text: string) => vectors[text] ?? [0, 1]),
+        dimensions: 2,
+        usage: {},
+      })),
+      rerank: jest.fn(async ({ documents }) => ({
+        results: documents.map((document: string, index: number) => ({
+          index,
+          relevanceScore:
+            document === 'India signs Javelin missile deal with US'
+              ? 0.91
+              : document === 'Why is India buying US Javelin Missiles'
+                ? 0.82
+                : 0.05,
+        })),
+        usage: {},
+      })),
+    };
+
+    const service = new SemanticTopicClusteringService(
+      runtime as never,
+      embeddingCache() as never,
+    );
+
+    const result = await service.findBestMatch(
+      {
+        id: 'incoming',
+        projectId: 'project-1',
+        text: 'India places order for US Javelin missiles',
+        normalizedText: 'india places order for us javelin missiles',
+      },
+      [
+        {
+          id: 'javelin-buy',
+          projectId: 'project-1',
+          text: 'Why is India buying US Javelin Missiles',
+          normalizedText: 'why is india buying us javelin missiles',
+        },
+        {
+          id: 'javelin-deal',
+          projectId: 'project-1',
+          text: 'India signs Javelin missile deal with US',
+          normalizedText: 'india signs javelin missile deal with us',
+        },
+        {
+          id: 'gcap',
+          projectId: 'project-1',
+          text: 'India joins GCAP programme',
+          normalizedText: 'india joins gcap programme',
+        },
+        {
+          id: 'rafale',
+          projectId: 'project-1',
+          text: 'What is Rafale F4.3?',
+          normalizedText: 'what is rafale f4 3',
+        },
+      ],
+    );
+
+    expect(result).toMatchObject({
+      candidateId: 'javelin-deal',
+      rerankScore: 0.91,
+    });
+
+    expect(runtime.rerank).toHaveBeenCalledTimes(1);
+    expect(runtime.rerank).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: 'India places order for US Javelin missiles',
+      }),
+    );
+  });
+
+  it('does not reject a match merely because multiple semantic candidates are valid', async () => {
+    const runtime = {
+      route: jest.fn(() => ({
+        provider: 'local-qwen-embedding',
+        model: 'Qwen3-Embedding-0.6B',
+      })),
+      embed: jest.fn(async ({ texts }) => ({
+        embeddings: texts.map(() => [1, 0]),
+        dimensions: 2,
+        usage: {},
+      })),
+      rerank: jest.fn(async () => ({
+        results: [
+          { index: 0, relevanceScore: 0.72 },
+          { index: 1, relevanceScore: 0.88 },
+        ],
+        usage: {},
+      })),
+    };
+
+    const service = new SemanticTopicClusteringService(
+      runtime as never,
+      embeddingCache() as never,
+    );
+
+    const result = await service.findBestMatch(
+      {
+        id: 'incoming',
+        projectId: 'project-1',
+        text: 'India places new Javelin missile order',
+        normalizedText: 'india places new javelin missile order',
+      },
+      [
+        {
+          id: 'topic-1',
+          projectId: 'project-1',
+          text: 'India buys US Javelin missiles',
+          normalizedText: 'india buys us javelin missiles',
+        },
+        {
+          id: 'topic-2',
+          projectId: 'project-1',
+          text: 'US India Javelin missile deal signed',
+          normalizedText: 'us india javelin missile deal signed',
+        },
+      ],
+    );
+
+    expect(result?.candidateId).toBe('topic-2');
+    expect(result?.rerankScore).toBe(0.88);
+  });
+
+  it('does not send candidates below retrieval similarity threshold to BGE', async () => {
+    const runtime = {
+      route: jest.fn(() => ({
+        provider: 'local-qwen-embedding',
+        model: 'Qwen3-Embedding-0.6B',
+      })),
+      embed: jest.fn(async ({ texts }) => ({
+        embeddings: texts.map((text: string) =>
+          text === 'India Javelin missile deal'
+            ? [1, 0]
+            : [0, 1],
+        ),
+        dimensions: 2,
+        usage: {},
+      })),
+      rerank: jest.fn(),
+    };
+
+    const service = new SemanticTopicClusteringService(
+      runtime as never,
+      embeddingCache() as never,
+    );
+
+    const result = await service.findBestMatch(
+      {
+        id: 'incoming',
+        projectId: 'project-1',
+        text: 'India Javelin missile deal',
+        normalizedText: 'india javelin missile deal',
+      },
+      [
+        {
+          id: 'earthquake',
+          projectId: 'project-1',
+          text: 'Japan earthquake response',
+          normalizedText: 'japan earthquake response',
+        },
+      ],
+    );
+
+    expect(result).toBeUndefined();
+    expect(runtime.rerank).not.toHaveBeenCalled();
+  });
+
+  it('returns no incremental match when BGE confirmation is below admission score', async () => {
+    const runtime = {
+      route: jest.fn(() => ({
+        provider: 'local-qwen-embedding',
+        model: 'Qwen3-Embedding-0.6B',
+      })),
+      embed: jest.fn(async ({ texts }) => ({
+        embeddings: texts.map(() => [1, 0]),
+        dimensions: 2,
+        usage: {},
+      })),
+      rerank: jest.fn(async () => ({
+        results: [{ index: 0, relevanceScore: -70 }],
+        usage: {},
+      })),
+    };
+
+    const service = new SemanticTopicClusteringService(
+      runtime as never,
+      embeddingCache() as never,
+    );
+
+    const result = await service.findBestMatch(
+      {
+        id: 'incoming',
+        projectId: 'project-1',
+        text: 'India Javelin missile order',
+        normalizedText: 'india javelin missile order',
+      },
+      [
+        {
+          id: 'topic-1',
+          projectId: 'project-1',
+          text: 'India buys US Javelin missiles',
+          normalizedText: 'india buys us javelin missiles',
+        },
+      ],
+    );
+
+    expect(result).toBeUndefined();
+    expect(runtime.rerank).toHaveBeenCalledTimes(1);
+  });
 });
+

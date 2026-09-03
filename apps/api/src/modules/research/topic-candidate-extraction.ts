@@ -8,9 +8,10 @@ export type TopicCandidateExtraction = { candidates: ExtractedTopicCandidate[]; 
 const STRONG_SEPARATOR = /\s*(?:\||;|\u2022|\u00b7)\s*/;
 const HASHTAG = /(?:\s|^)#[\p{L}\p{N}_-]+/gu;
 const ATTRIBUTION = /^(?:by\s+|presented\s+by\s+|with\s+)[\p{L}][\p{L}'-]*(?:\s+[\p{L}][\p{L}'-]*){0,5}$/iu;
-const CHANNEL_MARKER = /\b(?:dialogues?|podcast|channel|shorts?|hindi)\b/i;
+const CHANNEL_MARKER = /\b(?:podcast|channel|shorts?|hindi)\b/i;
 const EXPLANATION = /^(?:(?:what|why|how)\s+(?:it|this|that|the\s+[^ ]+)?\s*(?:means(?:\s+for\s+[^ ]+(?:\s+[^ ]+)?)?|matters|is\s+happening|happening)|(?:[\p{L}\s,-]+,\s*)?(?:geography|geology|history|politics|defen[cs]e)\s+explained)$/iu;
 const PRESENTER_TITLE = /^(?:major|dr|prof)\.?\s+[\p{L}][\p{L}'-]*(?:\s+[\p{L}][\p{L}'-]*){1,4}$/iu;
+const PRESENTER_SUFFIX = /\b(?:major|dr|prof)\.?\s+[\p{L}][\p{L}'-]*(?:\s+[\p{L}][\p{L}'-]*){1,4}$/iu;
 
 /**
  * Stable, precision-first extraction. Metadata fragments are rejected before
@@ -28,8 +29,19 @@ export function extractTopicCandidatesWithDiagnostics(title: string): TopicCandi
   const rawCandidates = parts.length > 1 ? parts : [value];
   const rejected: CandidateRejection[] = [];
   const candidates = new Map<string, ExtractedTopicCandidate>();
-  for (const raw of rawCandidates) {
+  for (const [index, raw] of rawCandidates.entries()) {
     const { text, category } = classifyCandidate(raw);
+
+    if (
+      strong.length > 1 &&
+      index > 0 &&
+      text &&
+      !category &&
+      !hasEventShape(text)
+    ) {
+      rejected.push({ text, category: 'branding' });
+      continue;
+    }
     if (!text || category) {
       rejected.push({ text: clean(raw), category: category ?? 'empty_or_short' });
       continue;
@@ -51,17 +63,63 @@ function updateList(title: string): string[] {
   return parts.length > 1 ? parts : [title];
 }
 
+function stripSecondaryContext(value: string): string {
+  const patterns = [
+    // Event/venue context:
+    // "Indus waters at SCO Summit" -> "Indus waters"
+    /\s+(?:at|during|amid|on the sidelines of)\s+(?:the\s+)?[^,.!?|]{0,80}\b(?:summit|conference|forum|meeting|session|event)\b.*$/iu,
+
+    // Timing/background context:
+    // Keep the primary proposition instead of allowing the surrounding event
+    // to become part of the Topic identity.
+    /\s+(?:during|amid)\s+[^,.!?|]{0,80}$/iu,
+  ];
+
+  let result = value;
+
+  for (const pattern of patterns) {
+    const stripped = clean(result.replace(pattern, ''));
+
+    // Never destroy a short/invalid title while removing context.
+    if (stripped.split(/\s+/).length >= 3) {
+      result = stripped;
+    }
+  }
+
+  return result;
+}
+
 function classifyCandidate(value: string): { text: string; category?: CandidateRejectionCategory } {
   const cleaned = clean(value);
-  if (!cleaned || cleaned.split(/\s+/).length < 2) return { text: cleaned, category: 'empty_or_short' };
-  if (ATTRIBUTION.test(cleaned) || PRESENTER_TITLE.test(cleaned)) return { text: cleaned, category: 'attribution' };
+
+  if (!cleaned || cleaned.split(/\s+/).length < 2) {
+    return { text: cleaned, category: 'empty_or_short' };
+  }
+
+  if (ATTRIBUTION.test(cleaned) || PRESENTER_TITLE.test(cleaned)) {
+    return { text: cleaned, category: 'attribution' };
+  }
+
   const withoutHashtags = clean(cleaned.replace(HASHTAG, ''));
-  if (!withoutHashtags || withoutHashtags.split(/\s+/).length < 2) return { text: withoutHashtags, category: 'branding' };
-  if (EXPLANATION.test(withoutHashtags)) return { text: withoutHashtags, category: 'generic_explanation' };
-  // Channel/series labels are not event propositions. Require a title-shaped
-  // label rather than rejecting ordinary story titles that mention a channel.
-  if (CHANNEL_MARKER.test(withoutHashtags) && !hasEventShape(withoutHashtags)) return { text: withoutHashtags, category: 'branding' };
-  return { text: withoutHashtags };
+  const primaryEvent = stripSecondaryContext(withoutHashtags);
+
+  if (!primaryEvent || primaryEvent.split(/\s+/).length < 2) {
+    return { text: primaryEvent, category: 'branding' };
+  }
+
+  if (EXPLANATION.test(primaryEvent)) {
+    return { text: primaryEvent, category: 'generic_explanation' };
+  }
+
+  if (PRESENTER_SUFFIX.test(primaryEvent) && !hasEventShape(primaryEvent)) {
+    return { text: primaryEvent, category: 'branding' };
+  }
+
+  if (CHANNEL_MARKER.test(primaryEvent) && !hasEventShape(primaryEvent)) {
+    return { text: primaryEvent, category: 'branding' };
+  }
+
+  return { text: primaryEvent };
 }
 
 function hasEventShape(value: string): boolean {

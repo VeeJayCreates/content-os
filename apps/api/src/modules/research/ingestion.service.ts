@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
@@ -11,6 +12,7 @@ import type { IngestionResult } from '@content-os/contracts';
 import { ResearchSourceRepository, SignalRepository } from '@content-os/storage';
 
 import { YouTubeIngestionAdapter } from './youtube-ingestion.adapter';
+import { ResearchExecutionLogger } from './research-execution-logger.service';
 
 export interface IngestionItem {
   externalId?: string;
@@ -26,19 +28,26 @@ export class IngestionService {
     private readonly sources: ResearchSourceRepository,
     private readonly signals: SignalRepository,
     private readonly youtubeIngestionAdapter: YouTubeIngestionAdapter,
+    @Optional() private readonly executionLog?: ResearchExecutionLogger,
   ) {}
 
   async ingest(id: string): Promise<IngestionResult> {
+    const started = Date.now();
+    this.executionLog?.withContext({ sourceId: id }, () => this.executionLog?.event('debug', 'ingestion.source_lookup.started', 'started'));
     const source = await this.sources.findById(id);
     if (!source) {
+      this.executionLog?.withContext({ sourceId: id }, () => this.executionLog?.event('warn', 'ingestion.source_lookup.completed', 'not_found', { result: { found: false } }));
       throw new NotFoundException('Research source not found');
     }
     if (!source.enabled) {
       throw new BadRequestException('Research source is disabled');
     }
 
+    this.executionLog?.withContext({ sourceId: id, projectId: source.projectId }, () => this.executionLog?.event('debug', 'ingestion.source_lookup.completed', 'completed', { result: { found: true, sourceType: source.sourceType, target: source.url } }));
+
     this.assertSafeUrl(source.url);
     const items = await this.fetchItems(source.sourceType, source.url);
+    this.executionLog?.withContext({ sourceId: id, projectId: source.projectId }, () => this.executionLog?.event('debug', 'ingestion.provider_response.parsed', 'completed', { result: { itemsReceived: items.length } }));
     const result: IngestionResult = {
       fetchedCount: items.length,
       createdCount: 0,
@@ -73,10 +82,13 @@ export class IngestionService {
 
       if (outcome === 'created') {
         result.createdCount += 1;
+        this.executionLog?.withContext({ sourceId: id, projectId: source.projectId }, () => this.executionLog?.event('info', 'signal.persistence.completed', 'created', { result: { externalId, title: item.title.slice(0, 240) } }));
       } else {
         result.duplicateCount += 1;
+        this.executionLog?.withContext({ sourceId: id, projectId: source.projectId }, () => this.executionLog?.event('debug', 'signal.persistence.completed', 'reused', { result: { externalId, reasonCode: 'duplicate_signal_identity' } }));
       }
     }
+    this.executionLog?.withContext({ sourceId: id, projectId: source.projectId }, () => this.executionLog?.event('info', 'ingestion.completed', 'completed', { durationMs: Date.now() - started, result }));
 
     return result;
   }

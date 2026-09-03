@@ -8,6 +8,10 @@ import {
 } from "@content-os/contracts";
 import { VisualAssetAcquisitionView } from "./visual-asset-acquisition-view.ts";
 import {
+  candidateEntryAllowed,
+  internallyResolvedRequirement,
+} from "./visual-asset-manifest-panel.tsx";
+import {
   acquisitionActions,
   performAcquisitionAction,
 } from "./visual-asset-acquisition-state.ts";
@@ -141,5 +145,38 @@ test("renders deterministic provider failure and permits backend-approved retry"
       async () => {},
     ),
     /Provider request rejected deterministically/,
+  );
+});
+
+test("limits manual candidate entry to candidate-backed acquisition strategies", () => {
+  assert.equal(candidateEntryAllowed("provider_search"), true);
+  assert.equal(candidateEntryAllowed("source_reference"), true);
+  assert.equal(candidateEntryAllowed("manual"), true);
+  assert.equal(candidateEntryAllowed("reusable_template"), false);
+  assert.equal(candidateEntryAllowed("programmatic_specification"), false);
+  assert.equal(candidateEntryAllowed("none_required"), false);
+});
+
+test("counts no-file programmatic requirements as resolved only without review", () => {
+  for (const acquisitionStrategy of [
+    "none_required",
+    "reusable_template",
+    "programmatic_specification",
+  ]) {
+    assert.equal(
+      internallyResolvedRequirement({ acquisitionStrategy, manualReviewRequired: false }),
+      true,
+    );
+    assert.equal(
+      internallyResolvedRequirement({ acquisitionStrategy, manualReviewRequired: true }),
+      false,
+    );
+  }
+  assert.equal(
+    internallyResolvedRequirement({
+      acquisitionStrategy: "provider_search",
+      manualReviewRequired: false,
+    }),
+    false,
   );
 });
